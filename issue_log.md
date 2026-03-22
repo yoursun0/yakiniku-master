@@ -1,5 +1,18 @@
 # Issue Log - Yakiniku Master Ultimate
 
+## [2026-03-21]
+
+### 1. Mobile Layout & Interaction Refinement
+- **Issue:** Mobile users found it difficult to drag meat due to layout constraints and requested a specific stacking order.
+- **Fix:** Restructured mobile portrait layout to: Plate (Top), Grill (Middle), Sauce Bowl (Bottom).
+- **Issue:** "Tap-to-place" feature was added without approval and was not desired.
+- **Fix:** Removed "tap-to-place" functionality; meat placement now strictly requires dragging.
+- **Issue:** Meat became hidden/clipped when dragged from the grill to the sauce bowl.
+- **Fix:** Set `overflow-visible` on grill containers and added `whileDrag` with high `zIndex` to meats on the grill to ensure visibility during interaction.
+- **Issue:** Drag-and-drop accuracy was poor on mobile; meat often failed to drop on targets.
+- **Fix:** Refactored hit detection to use coordinate-based math with generous margins (55% grill radius, 30px sauce bowl margin) instead of `elementFromPoint`.
+- **Status:** Fixed & Verified.
+
 ## [2026-03-20]
 
 ### 1. Extracted Game Logic for Testing

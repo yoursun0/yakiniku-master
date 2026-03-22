@@ -56,6 +56,12 @@ export default function App() {
   const [floatingScores, setFloatingScores] = useState<{ id: string; score: number; x: number; y: number; isSauce?: boolean }[]>([]);
   const [bonusTimeAdded, setBonusTimeAdded] = useState(0);
   const [draggedMeatId, setDraggedMeatId] = useState<string | null>(null);
+  const [draggingMeat, setDraggingMeat] = useState<{
+    source: 'plate' | 'grill';
+    meatId?: string;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
   
   const appRef = useRef<HTMLDivElement>(null);
   const grillRef = useRef<HTMLDivElement>(null);
@@ -169,116 +175,128 @@ export default function App() {
     };
   }, [gameState]);
 
-  // --- Drag and Drop Logic ---
-  const onDragStartFromPlate = (e: React.DragEvent) => {
-    if (gameState !== 'playing' || meatOnPlate <= 0) {
-      e.preventDefault();
-      return;
-    }
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('source', 'plate');
+  // --- Mouse Event Dragging Logic ---
+  const handleMouseDownFromPlate = (e: React.MouseEvent) => {
+    if (gameState !== 'playing' || meatOnPlate <= 0) return;
+    setDraggingMeat({
+      source: 'plate',
+      currentX: e.clientX,
+      currentY: e.clientY,
+    });
   };
 
-  const onDragStartFromGrill = (e: React.DragEvent, meatId: string) => {
-    if (gameState !== 'playing') {
-      e.preventDefault();
-      return;
-    }
+  const handleMouseDownFromGrill = (e: React.MouseEvent, meatId: string) => {
+    if (gameState !== 'playing') return;
+    e.stopPropagation();
+    setDraggingMeat({
+      source: 'grill',
+      meatId,
+      currentX: e.clientX,
+      currentY: e.clientY,
+    });
     setDraggedMeatId(meatId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('source', 'grill');
-    e.dataTransfer.setData('meatId', meatId);
   };
 
-  const onDragEnd = () => {
-    setDraggedMeatId(null);
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggingMeat) return;
+    setDraggingMeat(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
   };
 
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!draggingMeat) return;
 
-  const onDropOnGrill = (e: React.DragEvent) => {
-    e.preventDefault();
-    const source = e.dataTransfer.getData('source');
-    if ((source !== 'plate' && source !== 'grill') || gameState !== 'playing' || !grillRef.current) return;
+    const { source, meatId } = draggingMeat;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
 
-    const rect = grillRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left - MEAT_WIDTH / 2;
-    const y = e.clientY - rect.top - MEAT_HEIGHT / 2;
+    // Check if dropped on grill
+    if (grillRef.current) {
+      const rect = grillRef.current.getBoundingClientRect();
+      const x = clientX - rect.left - MEAT_WIDTH / 2;
+      const y = clientY - rect.top - MEAT_HEIGHT / 2;
 
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const dist = Math.sqrt(Math.pow(x + MEAT_WIDTH / 2 - centerX, 2) + Math.pow(y + MEAT_HEIGHT / 2 - centerY, 2));
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const dist = Math.sqrt(Math.pow(x + MEAT_WIDTH / 2 - centerX, 2) + Math.pow(y + MEAT_HEIGHT / 2 - centerY, 2));
 
-    if (dist > GRILL_RADIUS - 20) return;
+      if (dist <= GRILL_RADIUS - 20) {
+        if (source === 'plate') {
+          const isOverlapping = meatsOnGrill.some(meat => {
+            const dx = meat.x - x;
+            const dy = meat.y - y;
+            const d = Math.sqrt(Math.pow(dx / MEAT_WIDTH, 2) + Math.pow(dy / MEAT_HEIGHT, 2));
+            return d < 0.85;
+          });
 
-    if (source === 'plate') {
-      const isOverlapping = meatsOnGrill.some(meat => {
-        const dx = meat.x - x;
-        const dy = meat.y - y;
-        return Math.sqrt(dx * dx + dy * dy) < MEAT_HEIGHT * 0.75;
-      });
+          if (!isOverlapping) {
+            const newMeat: MeatOnGrill = {
+              id: Math.random().toString(36).substr(2, 9),
+              x,
+              y,
+              sideA: { elapsed: 0, state: 'raw' },
+              sideB: { elapsed: 0, state: 'raw' },
+              isSideAFacingDown: true,
+            };
+            setMeatsOnGrill(prev => [...prev, newMeat]);
+            setMeatOnPlate(prev => prev - 1);
+            playSound('sizzle');
+            playSound('sizzleAction');
+          }
+        } else if (source === 'grill' && meatId) {
+          const isOverlapping = meatsOnGrill.some(meat => {
+            if (meat.id === meatId) return false;
+            const dx = meat.x - x;
+            const dy = meat.y - y;
+            const d = Math.sqrt(Math.pow(dx / MEAT_WIDTH, 2) + Math.pow(dy / MEAT_HEIGHT, 2));
+            return d < 0.85;
+          });
 
-      if (isOverlapping) return;
-
-      const newMeat: MeatOnGrill = {
-        id: Math.random().toString(36).substr(2, 9),
-        x,
-        y,
-        sideA: { elapsed: 0, state: 'raw' },
-        sideB: { elapsed: 0, state: 'raw' },
-        isSideAFacingDown: true,
-      };
-
-      setMeatsOnGrill((prev) => [...prev, newMeat]);
-      setMeatOnPlate((prev) => prev - 1);
-      playSound('sizzle');
-      playSound('sizzleAction');
-    } else if (source === 'grill') {
-      const meatId = e.dataTransfer.getData('meatId');
-      if (!meatId) return;
-      setMeatsOnGrill(prev => prev.map(m => m.id === meatId ? { ...m, x, y } : m));
+          if (!isOverlapping) {
+            setMeatsOnGrill(prev => prev.map(m => m.id === meatId ? { ...m, x, y } : m));
+          }
+        }
+      }
     }
-    setDraggedMeatId(null);
-  };
 
-  const onDropOnSauce = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDraggedMeatId(null);
-    const source = e.dataTransfer.getData('source');
-    const meatId = e.dataTransfer.getData('meatId');
-    if (source !== 'grill' || !meatId || gameState !== 'playing') return;
-
-    const meat = meatsOnGrill.find(m => m.id === meatId);
-    if (!meat) return;
-
-    const points = getPoints(meat.sideA.state) + getPoints(meat.sideB.state);
-
-    // HP Logic
-    const hpChange = calculateHpChange(meat.sideA.state, meat.sideB.state);
-
-    setHp(prev => Math.min(maxHp, Math.max(0, prev + hpChange)));
-    
-    // Use drop coordinates for floating score
-    if (appRef.current) {
-      const appRect = appRef.current.getBoundingClientRect();
-      const dropX = e.clientX - appRect.left;
-      const dropY = e.clientY - appRect.top;
-      applyScore(points, dropX, dropY, true);
+    // Check if dropped on sauce
+    const sauceBowl = document.querySelector('.sauce-bowl-target');
+    if (sauceBowl) {
+      const rect = sauceBowl.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+        if (source === 'grill' && meatId) {
+          const meat = meatsOnGrill.find(m => m.id === meatId);
+          if (meat) {
+            const points = getPoints(meat.sideA.state) + getPoints(meat.sideB.state);
+            const hpChange = calculateHpChange(meat.sideA.state, meat.sideB.state);
+            setHp(prev => Math.min(maxHp, Math.max(0, prev + hpChange)));
+            
+            if (appRef.current) {
+              const appRect = appRef.current.getBoundingClientRect();
+              const centerX = rect.left + rect.width / 2 - appRect.left - 120;
+              const centerY = rect.top + rect.height / 2 - appRect.top - 60;
+              applyScore(points, centerX, centerY, true);
+            }
+            
+            setMeatsOnGrill(prev => prev.filter(m => m.id !== meatId));
+            if (meatsOnGrill.length === 1) stopSound('sizzle');
+          }
+        }
+      }
     }
-    
-    setMeatsOnGrill((prev) => prev.filter((m) => m.id !== meatId));
-    
-    if (meatsOnGrill.length === 1) stopSound('sizzle');
+
+    setDraggingMeat(null);
+    setDraggedMeatId(null);
   };
 
   const applyScore = (points: number, x: number, y: number, isSauce: boolean = false) => {
+    console.log(`[DEBUG] Applying Score: ${points} at (${x}, ${y})`);
     setScore((prev) => prev + points);
     const scoreId = Math.random().toString(36).substr(2, 9);
     setFloatingScores(prev => [...prev, { id: scoreId, score: points, x, y, isSauce }]);
+    console.log(`[DEBUG] Floating Scores Count: ${floatingScores.length + 1}`);
     setTimeout(() => {
       setFloatingScores(prev => prev.filter(s => s.id !== scoreId));
+      console.log(`[DEBUG] Floating Score ${scoreId} removed`);
     }, 1000);
   };
 
@@ -306,7 +324,10 @@ export default function App() {
   };
 
   return (
-    <div ref={appRef} className="relative w-full h-screen overflow-hidden flex flex-col items-center select-none"
+    <div ref={appRef} 
+         className="relative w-full h-screen overflow-hidden flex flex-col items-center select-none"
+         onMouseMove={handleMouseMove}
+         onMouseUp={handleMouseUp}
          style={{ 
            background: `
              radial-gradient(circle at center, #333 0%, #111 100%),
@@ -316,41 +337,41 @@ export default function App() {
          }}>
       
       {/* --- Top Status Bar --- */}
-      <div className="w-full max-w-4xl px-6 py-4 flex items-center justify-between z-10 bg-black/40 backdrop-blur-sm border-b border-white/10">
-        <div className="flex items-center gap-3 text-white font-bold text-2xl drop-shadow-md">
-          <Clock className="w-6 h-6 text-yellow-400" />
+      <div className="mt-6 w-full max-w-5xl px-8 py-4 flex items-center justify-between z-10 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl">
+        <div className="flex items-center gap-4 text-white font-black text-3xl drop-shadow-lg">
+          <Clock className="w-8 h-8 text-yellow-500" />
           <span>{timeLeft}秒</span>
         </div>
 
-        <div className="flex-1 mx-8 flex flex-col gap-2">
+        <div className="flex-1 mx-12 flex flex-col gap-3">
           {/* Time Bar */}
-          <div className="h-3 bg-stone-800 rounded-full overflow-hidden border border-white/5 relative">
-            <motion.div 
-              className="h-full bg-emerald-500"
-              initial={{ width: '100%' }}
-              animate={{ width: `${(timeLeft / 120) * 100}%` }}
-              transition={{ duration: 1, ease: "linear" }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold uppercase tracking-tighter">
-              剩餘時間
+          <div className="flex flex-col gap-1">
+            <div className="text-[10px] text-white/70 font-bold uppercase tracking-widest text-center">剩餘時間</div>
+            <div className="h-3 bg-stone-900 rounded-full overflow-hidden border border-white/5 shadow-inner">
+              <motion.div 
+                className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                initial={{ width: '100%' }}
+                animate={{ width: `${(timeLeft / 120) * 100}%` }}
+                transition={{ duration: 1, ease: "linear" }}
+              />
             </div>
           </div>
           {/* HP Bar */}
-          <div className="h-5 bg-stone-800 rounded-full overflow-hidden border border-white/5 relative">
+          <div className="h-6 bg-stone-900 rounded-full overflow-hidden border border-white/5 relative shadow-inner">
             <motion.div 
-              className={`h-full ${hp > maxHp * 0.3 ? 'bg-emerald-500' : 'bg-red-500'}`}
+              className={`h-full transition-colors duration-500 ${hp > maxHp * 0.3 ? 'bg-emerald-400' : 'bg-red-500'}`}
               initial={{ width: '100%' }}
               animate={{ width: `${(hp / maxHp) * 100}%` }}
               transition={{ duration: 0.3 }}
             />
-            <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-black uppercase tracking-widest drop-shadow-md">
+            <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white font-black uppercase tracking-widest drop-shadow-md">
               體力值: {hp} / {maxHp}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-white font-bold text-2xl drop-shadow-md">
-          <Trophy className="w-6 h-6 text-yellow-400" />
+        <div className="flex items-center gap-3 text-white font-black text-3xl drop-shadow-lg">
+          <Trophy className="w-8 h-8 text-yellow-500" />
           <span>得分: {score}</span>
         </div>
       </div>
@@ -367,8 +388,6 @@ export default function App() {
           {/* Black Mesh Grill */}
           <div 
             ref={grillRef}
-            onDragOver={onDragOver}
-            onDrop={onDropOnGrill}
             className="w-[380px] h-[380px] rounded-full bg-zinc-900 overflow-hidden relative border-4 border-black/30"
             style={{
               backgroundImage: `
@@ -396,9 +415,7 @@ export default function App() {
                       rotateY: meat.isSideAFacingDown ? 180 : 0
                     }}
                     exit={{ scale: 1.2, opacity: 0 }}
-                    draggable
-                    onDragStart={(e) => onDragStartFromGrill(e, meat.id)}
-                    onDragEnd={onDragEnd}
+                    onMouseDown={(e) => handleMouseDownFromGrill(e, meat.id)}
                     onClick={() => handleMeatClick(meat)}
                     className="absolute cursor-pointer rounded-full shadow-lg preserve-3d"
                     style={{
@@ -406,7 +423,9 @@ export default function App() {
                       top: meat.y,
                       width: MEAT_WIDTH,
                       height: MEAT_HEIGHT,
-                      transformStyle: 'preserve-3d'
+                      transformStyle: 'preserve-3d',
+                      opacity: draggedMeatId === meat.id ? 0 : 1,
+                      pointerEvents: draggedMeatId === meat.id ? 'none' : 'auto'
                     }}
                   >
                     {/* Front Side (Side A) */}
@@ -444,30 +463,6 @@ export default function App() {
                 );
               })}
             </AnimatePresence>
-
-            {/* Floating Scores */}
-            <AnimatePresence>
-              {floatingScores.map(fs => (
-                <motion.div
-                  key={fs.id}
-                  initial={{ 
-                    y: 0, 
-                    opacity: 0,
-                    scale: 0.5
-                  }}
-                  animate={{ 
-                    y: -150, 
-                    opacity: 1,
-                    scale: 1.5
-                  }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  className={`absolute z-[100] pointer-events-none font-black text-6xl drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] ${fs.score > 0 ? 'text-yellow-400' : 'text-white'}`}
-                  style={{ left: fs.x, top: fs.y }}
-                >
-                  {fs.score > 0 ? `+${fs.score}` : `+${fs.score}`}
-                </motion.div>
-              ))}
-            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -476,20 +471,19 @@ export default function App() {
       <div className="w-full max-w-5xl px-10 pb-10 flex items-end justify-between">
         {/* Left: Plate with Raw Meat */}
         <div className="relative group">
-          <div className="w-72 h-56 rounded-[100px] bg-blue-800 border-8 border-blue-900 shadow-2xl flex items-center justify-center relative overflow-hidden"
-               style={{
-                 backgroundImage: 'radial-gradient(circle, #1e40af 1px, transparent 1px)',
-                 backgroundSize: '20px 20px'
-               }}>
+          <div className="w-72 h-56 rounded-[100px] bg-blue-700 border-8 border-blue-900 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center relative overflow-hidden transition-transform group-hover:scale-105">
+            <div className="w-full h-full absolute inset-0 opacity-20" style={{
+              backgroundImage: 'radial-gradient(circle, #ffffff22 1px, transparent 1px)',
+              backgroundSize: '15px 15px'
+            }} />
             {/* Meat Stack */}
-            <div className="flex flex-wrap justify-center gap-2 p-6">
-              {Array.from({ length: meatOnPlate }).map((_, i) => (
+            <div className="flex flex-wrap justify-center gap-2 p-6 z-10">
+              {Array.from({ length: meatOnPlate }).slice(0, 6).map((_, i) => (
                 <motion.div
                   key={`plate-meat-${i}`}
-                  draggable={gameState === 'playing'}
-                  onDragStart={onDragStartFromPlate}
+                  onMouseDown={handleMouseDownFromPlate}
                   whileHover={{ scale: 1.1 }}
-                  className="w-16 h-12 rounded-full cursor-grab active:cursor-grabbing shadow-md border border-white/10"
+                  className="w-16 h-12 rounded-full cursor-grab active:cursor-grabbing shadow-xl border-2 border-red-900/30"
                   style={getMeatStyle('raw')}
                 />
               ))}
@@ -502,9 +496,7 @@ export default function App() {
 
         {/* Right: Sauce Bowl */}
         <div 
-          onDragOver={onDragOver}
-          onDrop={onDropOnSauce}
-          className="relative group"
+          className="sauce-bowl-target relative group"
         >
           <div className="w-48 h-48 rounded-full bg-stone-700 border-8 border-stone-800 shadow-2xl flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105">
             <div className="w-36 h-36 rounded-full bg-[#2a1a10] shadow-inner flex items-center justify-center relative">
@@ -602,6 +594,17 @@ export default function App() {
             <h3 className="font-bold uppercase tracking-wider">除錯：烹飪狀態</h3>
             <span className="text-[10px] opacity-50">v3.1</span>
           </div>
+          <div className="mb-4 p-2 bg-black/40 rounded-lg border border-white/5">
+            <h4 className="text-[10px] uppercase opacity-50 mb-1">最近得分紀錄</h4>
+            <div className="max-h-24 overflow-y-auto space-y-1">
+              {floatingScores.map(fs => (
+                <div key={fs.id} className="text-[10px] font-mono text-yellow-400">
+                  {fs.score} pts @ ({Math.round(fs.x)}, {Math.round(fs.y)})
+                </div>
+              ))}
+              {floatingScores.length === 0 && <span className="text-[10px] opacity-30">無</span>}
+            </div>
+          </div>
           <div className="space-y-3">
             {meatsOnGrill.map(meat => (
               <div key={meat.id} className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-white/5">
@@ -630,10 +633,73 @@ export default function App() {
         </div>
       )}
 
+      {/* --- Global Floating Scores --- */}
+      <AnimatePresence>
+        {floatingScores.map(fs => (
+          <motion.div
+            key={fs.id}
+            initial={{ y: 20, opacity: 0, scale: 0.5 }}
+            animate={{ y: -120, opacity: 1, scale: 1.1 }}
+            exit={{ opacity: 0, scale: 1.4, filter: 'blur(8px)' }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+            className="absolute z-[200] pointer-events-none flex flex-col items-center"
+            style={{ 
+              left: fs.x, 
+              top: fs.y, 
+              transform: 'translate(-50%, -50%)' 
+            }}
+          >
+            <motion.span 
+              animate={{ rotate: [0, -3, 3, 0] }}
+              transition={{ duration: 0.2, repeat: 2 }}
+              className={`font-black text-7xl drop-shadow-[0_10px_20px_rgba(0,0,0,0.6)] ${
+                fs.score >= 20 ? 'text-emerald-400' : 
+                fs.score >= 10 ? 'text-yellow-400' : 
+                fs.score > 0 ? 'text-orange-400' :
+                'text-red-500'
+              }`}
+            >
+              {fs.score > 0 ? `+${fs.score}` : fs.score}
+            </motion.span>
+            <motion.span 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-white font-black text-2xl uppercase tracking-[0.15em] drop-shadow-xl bg-black/60 backdrop-blur-sm px-5 py-1.5 rounded-xl border-2 border-white/20 mt-3"
+            >
+              {fs.score >= 20 ? '神級美味！' : 
+               fs.score >= 10 ? '美味可口' : 
+               fs.score > 0 ? '普通' : 
+               fs.score === 0 ? '太難吃了' : '大失敗...'}
+            </motion.span>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
       <div className="absolute bottom-6 right-6 text-white/20 pointer-events-none flex items-center gap-3">
         <Flame className="w-6 h-6 animate-pulse text-orange-500" />
         <span className="text-sm font-mono uppercase tracking-[0.3em]">Yakiniku Master Ultimate v3.1</span>
       </div>
+
+      {/* --- Custom Drag Layer (No System Icons) --- */}
+      {draggingMeat && (
+        <div className="fixed inset-0 pointer-events-none z-[100]">
+          <div 
+            className="absolute shadow-2xl rounded-full border-2"
+            style={{ 
+              left: draggingMeat.currentX - MEAT_WIDTH / 2, 
+              top: draggingMeat.currentY - MEAT_HEIGHT / 2,
+              width: MEAT_WIDTH,
+              height: MEAT_HEIGHT,
+              ...getMeatStyle(
+                draggingMeat.source === 'plate' ? 'raw' : 
+                (meatsOnGrill.find(m => m.id === draggingMeat.meatId)?.isSideAFacingDown ? 
+                 meatsOnGrill.find(m => m.id === draggingMeat.meatId)!.sideA.state : 
+                 meatsOnGrill.find(m => m.id === draggingMeat.meatId)!.sideB.state)
+              )
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
