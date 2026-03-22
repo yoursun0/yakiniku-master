@@ -1,13 +1,106 @@
-# Release Notes - Yakiniku Master Ultimate v3.5
+# Release Notes - Yakiniku Master Ultimate v5.2
 
 ## 當前版本摘要
-本版本為「日式燒肉大師 ULTIMATE」的音效穩定性修復版本。我們更換了音效資源為更可靠的 Mixkit 來源，並修復了程式碼中的語法錯誤。
+本版本根據回饋優化了 UI 佈局，移除了多餘的裝飾性邊框，並調整了物件形狀以提升視覺自然度。
 
-## 新增功能 (New Features v3.5)
+## 新增功能 (New Features v5.2)
 
-### 1. 音效資源穩定性優化 (Sound Stability Optimization)
-*   **更換音效來源**：捨棄失效的 `soundjay.com` 連結，全面更換為 `assets.mixkit.co` 的穩定資源。
-*   **語法修復**：修正了浮動分數組件中的 `transform` 語法錯誤，確保 UI 渲染正常。
+### 1. UI 佈局優化 (UI Layout Optimization)
+*   **烤爐擴張 (Grill Expansion)**：移除了原本的金屬色外框，讓烤網圖片直接擴展至最大範圍，視覺上更為大氣。
+*   **背景還原 (Background Revert)**：移除了 `table.png`，還原為原本深邃的黑色放射狀漸層背景，使食材更為突出。
+*   **沾醬盤形狀調整 (Sauce Dish Shape)**：將右下角的沾醬盤由圓形改為圓角正方形，使其看起來更像真實的餐具。
+
+## 新增功能 (New Features v5.1)
+
+### 1. 寫實視覺資源 (Realistic Visual Assets)
+*   **烤網 (Grill)**：使用 `grill.png` 替換原本的網格背景。
+*   **生肉盤 (Start Dish)**：左下角的生肉盤現在使用 `start-dish.png` 背景。
+*   **沾醬盤 (Score Dish)**：右下角的沾醬區現在使用 `score-dish.png` 背景。
+*   **桌面 (Table)**：整個遊戲背景現在使用 `table.png` 紋理。
+
+## 新增功能 (New Features v5.0)
+
+### 1. 時間獎勵動畫 (Time Bonus Animation)
+*   **視覺回饋**：當觸發 +10 秒獎勵時，烤爐中央會彈出 "+10s" 與 "TIME BONUS!" 的浮動文字動畫，與得分動畫風格一致。
+*   **色彩區分**：時間獎勵採用青藍色 (Cyan) 視覺效果，以便與得分動畫（綠/黃/橙）進行區分。
+
+## 新增功能 (New Features v4.9)
+
+### 1. 視覺去邊框化 (Border-free Visuals)
+*   **移除邊框**：移除了肉塊在所有狀態下的 `borderColor` 與 `borderWidth`，讓肉塊貼圖邊緣更自然，不再有生硬的線條感。
+
+## 新增功能 (New Features v4.8)
+
+### 1. 肉塊視覺貼圖化 (Meat Texture Update)
+*   **動態貼圖載入**：肉塊現在會根據其烹飪狀態（生肉、半熟、全熟、過火、烤焦）自動載入對應的 PNG 圖片作為背景。
+*   **視覺一致性**：保留了原有的圓形邊框與陰影效果，確保新貼圖能完美融入現有的遊戲介面。
+
+## 新增功能 (New Features v4.7)
+
+### 1. 遊戲難度平衡調整 (Difficulty Balance Update)
+*   **簡單 (Easy)**: 80 HP, 10 塊肉 (維持不變)。
+*   **普通 (Normal)**: 40 HP, 15 塊肉 (原 50 HP, 20 塊肉)。
+*   **困難 (Hard)**: 20 HP, 20 塊肉 (原 30 HP, 35 塊肉)。
+
+### 2. 時間獎勵機制 (Time Bonus System)
+*   **自動補充獎勵**：當烤網與生肉盤皆空，系統自動補充生肉時，玩家將獲得 **+10 秒** 的剩餘時間獎勵。
+
+### 3. 架構優化 (Architecture Optimization)
+*   **多國語言遷移**：將 `TRANSLATIONS` 字典從 `App.tsx` 遷移至 `src/constants.ts` 進行集中管理。
+
+## 新增功能 (New Features v4.6)
+
+### 1. 功能開關機制 (Feature Flag System)
+*   **除錯面板開關**：新增 `ENABLE_DEBUG_PANEL` 旗標，預設為 `false`。
+*   **集中管理**：所有功能開關現在統一在 `src/constants.ts` 中管理，方便開發者隨時切換。
+
+## 新增功能 (New Features v4.5)
+
+### 1. 程式碼重構與清理 (Code Refactoring & Cleanup)
+*   **移除冗餘狀態**：刪除了 `bonusTimeAdded` 等不再使用的 Legacy 狀態。
+*   **優化計分邏輯**：移除了 `applyScore` 中的除錯日誌，並精簡了 `endGame` 的參數傳遞。
+*   **依賴項瘦身**：從 `package.json` 中移除了未使用的 `express` 與 `dotenv` 依賴。
+*   **邏輯精簡**：移除了 `gameLogic.ts` 中重複的難度標籤定義。
+*   **版本統一**：將 UI 顯示版本號更新至 v4.5。
+
+## 新增功能 (New Features v4.4)
+
+### 1. 音效系統簡化 (Simplified Sound System)
+*   **移除背景音**：取消了烤肉時的持續背景滋滋聲，營造更清爽的遊戲環境。
+*   **本地資源化**：所有音效（sizzle, correct, fail, end）現在均由本地 `/resources` 目錄讀取，不再依賴外部連結。
+*   **精準觸發機制**：
+    *   **sizzle.mp3**：放置肉片至烤網或點擊翻面時觸發。
+    *   **correct.mp3**：收成時得分大於 0 時觸發。
+    *   **fail.mp3**：收成時得分為 0 時觸發。
+    *   **end.mp3**：遊戲結束並顯示結算畫面時觸發。
+
+## 新增功能 (New Features v4.3)
+
+### 1. 全新乘法計分系統 (Multiplicative Scoring System)
+*   **係數機制**：每面肉片根據熟度賦予係數：
+    *   **完美熟度 (Well)**: 2
+    *   **半熟 (Half) / 過熟 (Over)**: 1
+    *   **生肉 (Raw) / 烤焦 (Burnt)**: 0
+*   **計算公式**：`單片得分 = 10 x A面係數 x B面係數`。
+*   **評價標準**：
+    *   **40分**：神乎其技！ (雙面完美)
+    *   **20分**：極致美味 (一面完美，一面半熟/過熟)
+    *   **10分**：還可以 (雙面半熟/過熟)
+    *   **0分**：失敗... (任一面生肉或烤焦)
+
+### 2. 術語更新 (Terminology Update)
+*   **健康值 (Health)**：原「體力 (HP)」更名為「健康值」，提升遊戲沉浸感。
+
+## 新增功能 (New Features v3.6)
+
+### 1. 行動裝置響應式佈局 (Mobile Responsive Layout)
+*   **自適應 UI**：烤網、肉盤與醬汁碗現在會根據螢幕寬度自動縮放。
+*   **行動版優化**：在小螢幕上隱藏了除錯面板，並調整了文字與按鈕大小以利觸控。
+
+### 2. 觸控拖曳支援 (Touch Gesture Support)
+*   **指尖操作**：針對行動裝置實作了 `Touch Events`，支援從肉盤拖曳至烤網，以及從烤網拖曳至醬汁碗。
+*   **視覺回饋**：拖曳時會顯示跟隨手指的肉片預覽。
+*   **雙模並行**：保留了桌機版的滑鼠拖曳邏輯，互不干擾。
 
 ## 核心功能 (Existing Features)
 
@@ -18,11 +111,11 @@
 
 ### 2. 精準的烹飪狀態 (Cooking States)
 根據受熱時間分為五個階段：
-*   **生肉 (Raw)**: 0-5秒
-*   **半熟 (Half)**: 5-10秒
-*   **全熟 (Well)**: 10-15秒 (最佳狀態)
-*   **過火 (Over)**: 15-20秒
-*   **烤焦 (Burnt)**: >20秒
+*   **生肉 (Raw)**: 0-10秒
+*   **半熟 (Half)**: 10-20秒
+*   **全熟 (Well)**: 20-25秒 (最佳狀態)
+*   **過火 (Over)**: 25-30秒
+*   **烤焦 (Burnt)**: >30秒
 
 ### 3. 計分與體力系統 (Scoring & HP)
 *   **總分計算**：收成時加總兩面的得分（全熟 +10, 半熟 +5）。

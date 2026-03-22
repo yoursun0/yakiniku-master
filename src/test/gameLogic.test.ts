@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getNewState, getPoints, calculateHpChange, DIFFICULTY_SETTINGS, checkOverlap, MEAT_WIDTH, MEAT_HEIGHT } from '../gameLogic';
+import { getNewState, getSideMultiplier, calculateHpChange, DIFFICULTY_SETTINGS, checkOverlap, MEAT_WIDTH, MEAT_HEIGHT } from '../gameLogic';
 
 describe('Game Logic', () => {
   describe('getNewState', () => {
@@ -28,19 +28,22 @@ describe('Game Logic', () => {
     });
   });
 
-  describe('getPoints', () => {
-    it('should return 10 for well', () => {
-      expect(getPoints('well')).toBe(10);
+  describe('getSideMultiplier', () => {
+    it('should return 2 for well', () => {
+      expect(getSideMultiplier('well')).toBe(2);
     });
 
-    it('should return 5 for half', () => {
-      expect(getPoints('half')).toBe(5);
+    it('should return 1 for half', () => {
+      expect(getSideMultiplier('half')).toBe(1);
+    });
+
+    it('should return 1 for over', () => {
+      expect(getSideMultiplier('over')).toBe(1);
     });
 
     it('should return 0 for others', () => {
-      expect(getPoints('raw')).toBe(0);
-      expect(getPoints('over')).toBe(0);
-      expect(getPoints('burnt')).toBe(0);
+      expect(getSideMultiplier('raw')).toBe(0);
+      expect(getSideMultiplier('burnt')).toBe(0);
     });
   });
 

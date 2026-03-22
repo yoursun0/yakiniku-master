@@ -2,10 +2,10 @@ export type MeatState = 'raw' | 'half' | 'well' | 'over' | 'burnt';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
-export const DIFFICULTY_SETTINGS: Record<Difficulty, { meats: number; hp: number; label: string }> = {
-  easy: { meats: 10, hp: 80, label: '簡單' },
-  normal: { meats: 20, hp: 50, label: '普通' },
-  hard: { meats: 35, hp: 30, label: '困難' },
+export const DIFFICULTY_SETTINGS: Record<Difficulty, { meats: number; hp: number }> = {
+  easy: { meats: 10, hp: 80 },
+  normal: { meats: 15, hp: 40 },
+  hard: { meats: 20, hp: 20 },
 };
 
 export const MEAT_WIDTH = 85;
@@ -20,10 +20,11 @@ export const getNewState = (elapsed: number): MeatState => {
   return 'raw';
 };
 
-export const getPoints = (state: MeatState): number => {
+export const getSideMultiplier = (state: MeatState): number => {
   switch (state) {
-    case 'well': return 10;
-    case 'half': return 5;
+    case 'well': return 2;
+    case 'half':
+    case 'over': return 1;
     default: return 0;
   }
 };

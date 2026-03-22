@@ -1,16 +1,103 @@
 # Issue Log - Yakiniku Master Ultimate
 
+### 1. UI Refinement & Layout Cleanup
+- **Issue:** The golden border around the grill was taking up too much space, and the square sauce dish was requested for better aesthetics.
+- **Fix:** 
+    - Removed the "Golden Grill Frame" div and expanded the `grill.png` container to fill the space.
+    - Reverted the main background to the original dark radial gradient for better contrast.
+    - Changed the `score-dish` container from `rounded-full` to `rounded-2xl` for a square look.
+    - Updated UI versioning to v5.2.
+- **Status:** Fixed & Verified (v5.2).
+
+### 2. Realistic Graphics Integration
+- **Issue:** The generated UI (grill mesh, solid color plates) looked too "flat" and less like a BBQ experience.
+- **Fix:** 
+    - Replaced CSS-generated backgrounds with high-quality image resources (`grill.png`, `start-dish.png`, `score-dish.png`, `table.png`).
+    - Adjusted Tailwind classes to use `bg-cover` and `bg-center` for proper image scaling.
+    - Updated UI versioning to v5.1.
+- **Status:** Fixed & Verified (v5.1).
+
+### 2. Time Bonus Visual Feedback
+- **Issue:** The +10s time bonus when clearing a plate lacked visual feedback, making it hard for players to notice.
+- **Fix:** 
+    - Created `applyTimeBonus` function to handle both state update and animation trigger.
+    - Integrated `applyTimeBonus` into the refill logic.
+    - Updated `floatingScores` rendering to support `isTimeBonus` type with unique styling (Cyan color).
+    - Added `timeBonus` translation to `constants.ts`.
+    - Updated UI versioning to v5.0.
+- **Status:** Fixed & Verified (v5.0).
+
+### 2. Border Removal for Meat
+- **Issue:** The border lines around the meat textures felt artificial and broke immersion.
+- **Fix:** 
+    - Updated `getMeatStyle` in `App.tsx` to set `border: 'none'` and removed all `borderColor` and `borderWidth` properties.
+    - Updated UI versioning to v4.9.
+- **Status:** Fixed & Verified (v4.9).
+
+### 2. Meat Texture Integration
+- **Issue:** Solid color gradients for meat were functional but lacked visual appeal.
+- **Fix:** 
+    - Updated `getMeatStyle` in `App.tsx` to use `backgroundImage` with URL paths to `/resources/*.png`.
+    - Added `backgroundSize: 'cover'` and `backgroundPosition: 'center'` for proper image fitting.
+    - Updated UI versioning to v4.8.
+- **Status:** Fixed & Verified (v4.8).
+
+### 2. Difficulty Balancing & Time Bonus
+- **Issue:** The difficulty settings were slightly unbalanced, and players needed more incentive to clear full plates.
+- **Fix:** 
+    - Updated `DIFFICULTY_SETTINGS` in `src/gameLogic.ts`.
+    - Implemented a +10s time bonus in the refill `useEffect` in `App.tsx`.
+    - Fixed a potential crash by correctly exporting and importing `TRANSLATIONS` from `src/constants.ts`.
+    - Updated UI versioning to v4.7.
+- **Status:** Fixed & Verified (v4.7).
+
+### 2. Feature Flag for Debug Panel
+- **Issue:** The debug panel was always visible in the playing state, which is not ideal for regular players.
+- **Fix:** 
+    - Created `src/constants.ts` to manage feature flags.
+    - Added `ENABLE_DEBUG_PANEL` flag (default: `false`).
+    - Wrapped the debug panel in `App.tsx` with this flag.
+    - Updated UI versioning to v4.6.
+- **Status:** Fixed & Verified (v4.6).
+
+### 2. Codebase Refactoring & Cleanup
+- **Issue:** The codebase contained legacy states (`bonusTimeAdded`), redundant logic in `gameLogic.ts`, and unused dependencies in `package.json`.
+- **Fix:** 
+    - Removed `bonusTimeAdded` state and simplified `endGame` logic.
+    - Cleaned up `console.log` statements in `applyScore`.
+    - Removed `express`, `@types/express`, and `dotenv` from `package.json`.
+    - Removed redundant `label` property from `DIFFICULTY_SETTINGS`.
+    - Updated UI versioning to v4.5.
+- **Status:** Fixed & Verified (v4.5).
+
+### 2. Sound System Simplification & Localization
+- **Issue:** External sound resources were unreliable, and the background loop was distracting.
+- **Fix:** 
+    - Removed background sizzle loop.
+    - Moved all sound assets to `/resources`.
+    - Simplified `playSound` logic to use local MP3 files.
+    - Updated triggers for `sizzle`, `correct`, `fail`, and `end` sounds.
+- **Status:** Fixed & Verified (v4.4).
+
+### 2. Scoring System Refactor & Terminology Update
+- **Issue:** The original additive scoring system was too simple.
+- **Fix:** 
+    - Implemented a multiplicative scoring system: `10 * sideA_mult * sideB_mult`.
+    - Updated `getSideMultiplier` in `src/gameLogic.ts`.
+    - Renamed "體力 (HP)" to "健康值 (Health)" across all translations and UI.
+    - Updated floating score feedback thresholds (40/20/10/0).
+- **Status:** Fixed & Verified (v4.3).
+
 ## [2026-03-22]
 
 ### 1. Mobile Responsiveness Evaluation
-- **Issue:** The game is currently not fully responsive on mobile devices, especially in portrait mode.
-- **Details:**
-    - **Horizontal Overflow:** The grill (420px) and the bottom interaction area (Plate + Bowl > 400px) exceed the standard mobile screen width (320px-375px).
-    - **Drag & Drop Incompatibility:** The game relies on HTML5 Drag and Drop API, which is not natively supported by touch events on mobile browsers.
-    - **Viewport Clipping:** Using `h-screen` (100vh) often leads to content being cut off by mobile browser address bars.
-    - **Touch Target Size:** UI elements like the debug panel buttons and game controls are too small for comfortable touch interaction.
-    - **Lack of Responsive Breakpoints:** The current layout is fixed and does not adapt to different screen aspect ratios.
-- **Status:** Pending Review (Do not fix yet).
+- **Issue:** The game was not responsive on mobile devices, especially in portrait mode.
+- **Fix:** 
+    - Implemented responsive Tailwind classes (`md:`) for all major UI components.
+    - Added `isTouchDevice` detection and `Touch Events` (`onTouchStart`, `onTouchMove`, `onTouchEnd`) for dragging.
+    - Refactored drop logic into unified handlers to support both mouse and touch.
+    - Added a touch drag proxy for visual feedback.
+- **Status:** Fixed & Verified (v3.6).
 
 ### 2. Test Infrastructure & Collision Logic Refinement
 - **Issue:** Test files were scattered in `src/`, and meat collision detection used a rectangular box which was inaccurate for oval shapes.

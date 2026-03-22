@@ -1,5 +1,5 @@
 {
   "name": "日式燒肉小遊戲 (Yakiniku Master)",
-  "description": "一個模擬日式燒肉的趣味小遊戲，考驗你的火候控制技巧！",
+  "description": "一個模擬日式燒肉的趣味小遊戲，考驗你的火候控制技巧！支援中英文切換與行動裝置優化。",
   "requestFramePermissions": []
 }
