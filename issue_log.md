@@ -1,5 +1,11 @@
 # Issue Log - Yakiniku Master Ultimate
 
+## [v6.6] 2026-03-22 - 結算畫面崩潰修復 (Game Over Crash Fix)
+- **問題描述**: 遊戲結束時（時間到或健康值歸零），畫面會崩潰並顯示 `Uncaught ReferenceError: setLeaderboardDifficulty is not defined`。
+- **根本原因**: 在 v6.6 版本中為了簡化 UI，移除了 `leaderboardDifficulty` 狀態與其設定函數 `setLeaderboardDifficulty`，但遺漏了 `endGame` 函數中對該函數的呼叫。
+- **解決方案**: 從 `App.tsx` 的 `endGame` 函數中移除 `setLeaderboardDifficulty(difficulty);` 這行已經失效的程式碼。
+- **狀態**: 已解決 (Fixed)
+
 ## [v6.5] 2026-03-22 - 行動版平衡性與動態評語 (Mobile Balance & Dynamic Comments)
 - **問題描述**: 
     1. 行動版烤網縮小但肉塊維持原大，導致操作空間變窄，不公平。

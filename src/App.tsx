@@ -230,7 +230,6 @@ export default function App() {
 
   const endGame = () => {
     setGameState('ended');
-    setLeaderboardDifficulty(difficulty);
     playSound('end');
   };
 

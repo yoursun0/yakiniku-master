@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "export": "npx bestzip app.zip * .env.example .gitignore"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
