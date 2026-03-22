@@ -1,5 +1,39 @@
 # Issue Log - Yakiniku Master Ultimate
 
+## [2026-03-22]
+
+### 1. Mobile Responsiveness Evaluation
+- **Issue:** The game is currently not fully responsive on mobile devices, especially in portrait mode.
+- **Details:**
+    - **Horizontal Overflow:** The grill (420px) and the bottom interaction area (Plate + Bowl > 400px) exceed the standard mobile screen width (320px-375px).
+    - **Drag & Drop Incompatibility:** The game relies on HTML5 Drag and Drop API, which is not natively supported by touch events on mobile browsers.
+    - **Viewport Clipping:** Using `h-screen` (100vh) often leads to content being cut off by mobile browser address bars.
+    - **Touch Target Size:** UI elements like the debug panel buttons and game controls are too small for comfortable touch interaction.
+    - **Lack of Responsive Breakpoints:** The current layout is fixed and does not adapt to different screen aspect ratios.
+- **Status:** Pending Review (Do not fix yet).
+
+### 2. Test Infrastructure & Collision Logic Refinement
+- **Issue:** Test files were scattered in `src/`, and meat collision detection used a rectangular box which was inaccurate for oval shapes.
+- **Fix:** 
+    - Moved all `.test.ts` files to `/src/test/` directory.
+    - Refactored `checkOverlap` in `src/gameLogic.ts` to use an **Elliptical Distance Formula** ($(\Delta x/W)^2 + (\Delta y/H)^2 < 1$).
+    - Added comprehensive test cases for diagonal near-misses where rectangles would overlap but ovals should not.
+- **Status:** Fixed & Verified (27 tests passing).
+
+### 3. Cooking Speed Balancing
+- **Issue:** Cooking was too fast, leading to frequent over-burning and a stressful experience.
+- **Fix:** 
+    - Extended cooking time thresholds (e.g., Well-done is now 20-25s instead of 10-15s).
+    - Updated `getNewState` implementation and corresponding unit tests.
+- **Status:** Fixed & Verified (v3.3).
+
+### 4. Sound Effect Access Denied / 404
+- **Issue:** Sound effect files from `actions.google.com` (Access Denied) and `soundjay.com` (404) were failing.
+- **Fix:** 
+    - Replaced all sound URLs with reliable alternatives from `assets.mixkit.co`.
+    - Verified and fixed a syntax error in `App.tsx` related to CSS transforms.
+- **Status:** Fixed & Verified (v3.5).
+
 ## [2026-03-21]
 
 ### 1. Mobile Layout & Interaction Refinement

@@ -6,20 +6,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Timer, Trophy, Flame, RotateCw, Play, BarChart3, Clock } from 'lucide-react';
-import { MeatState, getNewState, getPoints, calculateHpChange } from './gameLogic';
+import { MeatState, getNewState, getPoints, calculateHpChange, Difficulty, DIFFICULTY_SETTINGS, MEAT_WIDTH, MEAT_HEIGHT, GRILL_RADIUS, checkOverlap } from './gameLogic';
 
 // --- Types & Constants ---
-type Difficulty = 'easy' | 'normal' | 'hard';
-
-const DIFFICULTY_SETTINGS: Record<Difficulty, { meats: number; hp: number; label: string }> = {
-  easy: { meats: 10, hp: 80, label: '簡單' },
-  normal: { meats: 20, hp: 50, label: '普通' },
-  hard: { meats: 35, hp: 30, label: '困難' },
-};
-
-const MEAT_WIDTH = 85;
-const MEAT_HEIGHT = 65;
-const GRILL_RADIUS = 160;
 
 interface SideState {
   elapsed: number;
@@ -37,11 +26,11 @@ interface MeatOnGrill {
 
 // --- Sound Effects ---
 const SOUNDS = {
-  sizzle: 'https://actions.google.com/sounds/v1/foley/sizzle.ogg',
-  sizzleAction: 'https://actions.google.com/sounds/v1/foley/sizzle.ogg',
-  flip: 'https://actions.google.com/sounds/v1/cartoon/pop.ogg',
-  start: 'https://actions.google.com/sounds/v1/ui/beep_short_on.ogg',
-  finish: 'https://actions.google.com/sounds/v1/alarms/alarm_clock_beeping.ogg',
+  sizzle: 'https://assets.mixkit.co/sfx/preview/mixkit-fire-swoosh-burning-2447.mp3',
+  sizzleAction: 'https://assets.mixkit.co/sfx/preview/mixkit-fire-swoosh-burning-2447.mp3',
+  flip: 'https://assets.mixkit.co/sfx/preview/mixkit-modern-click-box-check-1120.mp3',
+  start: 'https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-changing-tab-206.mp3',
+  finish: 'https://assets.mixkit.co/sfx/preview/mixkit-church-bell-single-hit-640.mp3',
 };
 
 export default function App() {
@@ -56,12 +45,7 @@ export default function App() {
   const [floatingScores, setFloatingScores] = useState<{ id: string; score: number; x: number; y: number; isSauce?: boolean }[]>([]);
   const [bonusTimeAdded, setBonusTimeAdded] = useState(0);
   const [draggedMeatId, setDraggedMeatId] = useState<string | null>(null);
-  const [draggingMeat, setDraggingMeat] = useState<{
-    source: 'plate' | 'grill';
-    meatId?: string;
-    currentX: number;
-    currentY: number;
-  } | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   
   const appRef = useRef<HTMLDivElement>(null);
   const grillRef = useRef<HTMLDivElement>(null);
@@ -102,8 +86,7 @@ export default function App() {
 
   // --- Game Timer ---
   useEffect(() => {
-    if (gameState !== 'playing') {
-      stopSound('sizzle');
+    if (gameState !== 'playing' || isPaused) {
       return;
     }
 
@@ -111,7 +94,6 @@ export default function App() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           endGame(0);
-          clearInterval(timer);
           return 0;
         }
         return prev - 1;
@@ -119,7 +101,16 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameState]);
+  }, [gameState, isPaused]);
+
+  // --- Sizzle Sound Logic ---
+  useEffect(() => {
+    if (gameState === 'playing' && !isPaused && meatsOnGrill.length > 0) {
+      playSound('sizzle');
+    } else {
+      stopSound('sizzle');
+    }
+  }, [gameState, isPaused, meatsOnGrill.length]);
 
   // --- End Game Condition ---
   useEffect(() => {
@@ -144,7 +135,6 @@ export default function App() {
       setBonusTimeAdded(0);
     }
     playSound('finish');
-    stopSound('sizzle');
   };
 
   // --- Cooking Logic ---
@@ -152,6 +142,10 @@ export default function App() {
     if (gameState !== 'playing') return;
 
     const updateCooking = () => {
+      if (isPaused) {
+        gameLoopRef.current = requestAnimationFrame(updateCooking);
+        return;
+      }
       const delta = 16.67 / 1000;
       setMeatsOnGrill((prev) => 
         prev.map((meat) => {
@@ -175,117 +169,113 @@ export default function App() {
     };
   }, [gameState]);
 
-  // --- Mouse Event Dragging Logic ---
-  const handleMouseDownFromPlate = (e: React.MouseEvent) => {
-    if (gameState !== 'playing' || meatOnPlate <= 0) return;
-    setDraggingMeat({
-      source: 'plate',
-      currentX: e.clientX,
-      currentY: e.clientY,
-    });
+  // --- Drag and Drop Logic ---
+  const onDragStartFromPlate = (e: React.DragEvent) => {
+    if (gameState !== 'playing' || meatOnPlate <= 0) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('source', 'plate');
   };
 
-  const handleMouseDownFromGrill = (e: React.MouseEvent, meatId: string) => {
-    if (gameState !== 'playing') return;
-    e.stopPropagation();
-    setDraggingMeat({
-      source: 'grill',
-      meatId,
-      currentX: e.clientX,
-      currentY: e.clientY,
-    });
+  const onDragStartFromGrill = (e: React.DragEvent, meatId: string) => {
+    if (gameState !== 'playing') {
+      e.preventDefault();
+      return;
+    }
     setDraggedMeatId(meatId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('source', 'grill');
+    e.dataTransfer.setData('meatId', meatId);
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingMeat) return;
-    setDraggingMeat(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (!draggingMeat) return;
-
-    const { source, meatId } = draggingMeat;
-    const clientX = e.clientX;
-    const clientY = e.clientY;
-
-    // Check if dropped on grill
-    if (grillRef.current) {
-      const rect = grillRef.current.getBoundingClientRect();
-      const x = clientX - rect.left - MEAT_WIDTH / 2;
-      const y = clientY - rect.top - MEAT_HEIGHT / 2;
-
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const dist = Math.sqrt(Math.pow(x + MEAT_WIDTH / 2 - centerX, 2) + Math.pow(y + MEAT_HEIGHT / 2 - centerY, 2));
-
-      if (dist <= GRILL_RADIUS - 20) {
-        if (source === 'plate') {
-          const isOverlapping = meatsOnGrill.some(meat => {
-            const dx = meat.x - x;
-            const dy = meat.y - y;
-            const d = Math.sqrt(Math.pow(dx / MEAT_WIDTH, 2) + Math.pow(dy / MEAT_HEIGHT, 2));
-            return d < 0.85;
-          });
-
-          if (!isOverlapping) {
-            const newMeat: MeatOnGrill = {
-              id: Math.random().toString(36).substr(2, 9),
-              x,
-              y,
-              sideA: { elapsed: 0, state: 'raw' },
-              sideB: { elapsed: 0, state: 'raw' },
-              isSideAFacingDown: true,
-            };
-            setMeatsOnGrill(prev => [...prev, newMeat]);
-            setMeatOnPlate(prev => prev - 1);
-            playSound('sizzle');
-            playSound('sizzleAction');
-          }
-        } else if (source === 'grill' && meatId) {
-          const isOverlapping = meatsOnGrill.some(meat => {
-            if (meat.id === meatId) return false;
-            const dx = meat.x - x;
-            const dy = meat.y - y;
-            const d = Math.sqrt(Math.pow(dx / MEAT_WIDTH, 2) + Math.pow(dy / MEAT_HEIGHT, 2));
-            return d < 0.85;
-          });
-
-          if (!isOverlapping) {
-            setMeatsOnGrill(prev => prev.map(m => m.id === meatId ? { ...m, x, y } : m));
-          }
-        }
-      }
-    }
-
-    // Check if dropped on sauce
-    const sauceBowl = document.querySelector('.sauce-bowl-target');
-    if (sauceBowl) {
-      const rect = sauceBowl.getBoundingClientRect();
-      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-        if (source === 'grill' && meatId) {
-          const meat = meatsOnGrill.find(m => m.id === meatId);
-          if (meat) {
-            const points = getPoints(meat.sideA.state) + getPoints(meat.sideB.state);
-            const hpChange = calculateHpChange(meat.sideA.state, meat.sideB.state);
-            setHp(prev => Math.min(maxHp, Math.max(0, prev + hpChange)));
-            
-            if (appRef.current) {
-              const appRect = appRef.current.getBoundingClientRect();
-              const centerX = rect.left + rect.width / 2 - appRect.left - 120;
-              const centerY = rect.top + rect.height / 2 - appRect.top - 60;
-              applyScore(points, centerX, centerY, true);
-            }
-            
-            setMeatsOnGrill(prev => prev.filter(m => m.id !== meatId));
-            if (meatsOnGrill.length === 1) stopSound('sizzle');
-          }
-        }
-      }
-    }
-
-    setDraggingMeat(null);
+  const onDragEnd = () => {
     setDraggedMeatId(null);
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const onDropOnGrill = (e: React.DragEvent) => {
+    e.preventDefault();
+    const source = e.dataTransfer.getData('source');
+    if ((source !== 'plate' && source !== 'grill') || gameState !== 'playing' || !grillRef.current) return;
+
+    const rect = grillRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left - MEAT_WIDTH / 2;
+    const y = e.clientY - rect.top - MEAT_HEIGHT / 2;
+
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const dist = Math.sqrt(Math.pow(x + MEAT_WIDTH / 2 - centerX, 2) + Math.pow(y + MEAT_HEIGHT / 2 - centerY, 2));
+
+    if (dist > GRILL_RADIUS - 20) return;
+
+    if (source === 'plate') {
+      const isOverlapping = meatsOnGrill.some(meat => checkOverlap(meat.x, meat.y, x, y));
+
+      if (isOverlapping) return;
+
+      const newMeat: MeatOnGrill = {
+        id: Math.random().toString(36).substr(2, 9),
+        x,
+        y,
+        sideA: { elapsed: 0, state: 'raw' },
+        sideB: { elapsed: 0, state: 'raw' },
+        isSideAFacingDown: true,
+      };
+
+      setMeatsOnGrill((prev) => [...prev, newMeat]);
+      setMeatOnPlate((prev) => prev - 1);
+      playSound('sizzleAction');
+    } else if (source === 'grill') {
+      const meatId = e.dataTransfer.getData('meatId');
+      if (!meatId) return;
+
+      const isOverlapping = meatsOnGrill.some(meat => {
+        if (meat.id === meatId) return false;
+        return checkOverlap(meat.x, meat.y, x, y);
+      });
+
+      if (isOverlapping) return;
+
+      setMeatsOnGrill(prev => prev.map(m => m.id === meatId ? { ...m, x, y } : m));
+    }
+    setDraggedMeatId(null);
+  };
+
+  const onDropOnSauce = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggedMeatId(null);
+    const source = e.dataTransfer.getData('source');
+    const meatId = e.dataTransfer.getData('meatId');
+    if (source !== 'grill' || !meatId || gameState !== 'playing') return;
+
+    const meat = meatsOnGrill.find(m => m.id === meatId);
+    if (!meat) return;
+
+    const points = getPoints(meat.sideA.state) + getPoints(meat.sideB.state);
+
+    // HP Logic
+    const hpChange = calculateHpChange(meat.sideA.state, meat.sideB.state);
+
+    setHp(prev => Math.min(maxHp, Math.max(0, prev + hpChange)));
+    
+    // Use center of the sauce bowl for floating score, but offset significantly to the top-left
+    if (appRef.current && e.currentTarget && !isPaused) {
+      const appRect = appRef.current.getBoundingClientRect();
+      const bowlRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      // Move it 120px left and 60px up from the center to ensure it's clearly visible and not overlapping the right panel
+      const centerX = bowlRect.left + bowlRect.width / 2 - appRect.left - 120;
+      const centerY = bowlRect.top + bowlRect.height / 2 - appRect.top - 60;
+      applyScore(points, centerX, centerY, true);
+    }
+    
+    setMeatsOnGrill((prev) => prev.filter((m) => m.id !== meatId));
+    
+    if (meatsOnGrill.length === 1) stopSound('sizzle');
   };
 
   const applyScore = (points: number, x: number, y: number, isSauce: boolean = false) => {
@@ -324,10 +314,7 @@ export default function App() {
   };
 
   return (
-    <div ref={appRef} 
-         className="relative w-full h-screen overflow-hidden flex flex-col items-center select-none"
-         onMouseMove={handleMouseMove}
-         onMouseUp={handleMouseUp}
+    <div ref={appRef} className="relative w-full h-screen overflow-hidden flex flex-col items-center select-none"
          style={{ 
            background: `
              radial-gradient(circle at center, #333 0%, #111 100%),
@@ -388,6 +375,8 @@ export default function App() {
           {/* Black Mesh Grill */}
           <div 
             ref={grillRef}
+            onDragOver={onDragOver}
+            onDrop={onDropOnGrill}
             className="w-[380px] h-[380px] rounded-full bg-zinc-900 overflow-hidden relative border-4 border-black/30"
             style={{
               backgroundImage: `
@@ -415,7 +404,9 @@ export default function App() {
                       rotateY: meat.isSideAFacingDown ? 180 : 0
                     }}
                     exit={{ scale: 1.2, opacity: 0 }}
-                    onMouseDown={(e) => handleMouseDownFromGrill(e, meat.id)}
+                    draggable
+                    onDragStart={(e) => onDragStartFromGrill(e, meat.id)}
+                    onDragEnd={onDragEnd}
                     onClick={() => handleMeatClick(meat)}
                     className="absolute cursor-pointer rounded-full shadow-lg preserve-3d"
                     style={{
@@ -423,9 +414,7 @@ export default function App() {
                       top: meat.y,
                       width: MEAT_WIDTH,
                       height: MEAT_HEIGHT,
-                      transformStyle: 'preserve-3d',
-                      opacity: draggedMeatId === meat.id ? 0 : 1,
-                      pointerEvents: draggedMeatId === meat.id ? 'none' : 'auto'
+                      transformStyle: 'preserve-3d'
                     }}
                   >
                     {/* Front Side (Side A) */}
@@ -477,14 +466,23 @@ export default function App() {
               backgroundSize: '15px 15px'
             }} />
             {/* Meat Stack */}
-            <div className="flex flex-wrap justify-center gap-2 p-6 z-10">
-              {Array.from({ length: meatOnPlate }).slice(0, 6).map((_, i) => (
+            <div className="relative w-full h-full flex items-center justify-center z-10">
+              {Array.from({ length: meatOnPlate }).slice(0, 8).map((_, i) => (
                 <motion.div
                   key={`plate-meat-${i}`}
-                  onMouseDown={handleMouseDownFromPlate}
-                  whileHover={{ scale: 1.1 }}
-                  className="w-16 h-12 rounded-full cursor-grab active:cursor-grabbing shadow-xl border-2 border-red-900/30"
-                  style={getMeatStyle('raw')}
+                  draggable={gameState === 'playing' && !isPaused}
+                  onDragStart={onDragStartFromPlate}
+                  whileHover={{ scale: 1.05 }}
+                  className="absolute rounded-full cursor-grab active:cursor-grabbing shadow-xl border-2 border-red-900/30"
+                  style={{
+                    ...getMeatStyle('raw'),
+                    width: MEAT_WIDTH,
+                    height: MEAT_HEIGHT,
+                    left: `calc(50% - ${MEAT_WIDTH/2}px + ${(i % 3 - 1) * 20}px)`,
+                    top: `calc(50% - ${MEAT_HEIGHT/2}px + ${Math.floor(i / 3 - 1) * 15}px)`,
+                    zIndex: i,
+                    transform: `rotate(${(i % 2 === 0 ? 1 : -1) * (i * 5)}deg)`
+                  }}
                 />
               ))}
             </div>
@@ -496,7 +494,9 @@ export default function App() {
 
         {/* Right: Sauce Bowl */}
         <div 
-          className="sauce-bowl-target relative group"
+          onDragOver={onDragOver}
+          onDrop={onDropOnSauce}
+          className="relative group"
         >
           <div className="w-48 h-48 rounded-full bg-stone-700 border-8 border-stone-800 shadow-2xl flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105">
             <div className="w-36 h-36 rounded-full bg-[#2a1a10] shadow-inner flex items-center justify-center relative">
@@ -592,7 +592,15 @@ export default function App() {
         <div className="absolute right-4 top-24 w-64 bg-black/60 backdrop-blur-md rounded-2xl p-4 border border-white/10 text-white text-xs z-30 max-h-[70vh] overflow-y-auto shadow-2xl">
           <div className="flex items-center justify-between mb-2 border-b border-white/20 pb-1">
             <h3 className="font-bold uppercase tracking-wider">除錯：烹飪狀態</h3>
-            <span className="text-[10px] opacity-50">v3.1</span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsPaused(!isPaused)}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-colors ${isPaused ? 'bg-emerald-500 text-white' : 'bg-white/20 hover:bg-white/30'}`}
+              >
+                {isPaused ? '繼續' : '暫停'}
+              </button>
+              <span className="text-[10px] opacity-50">v3.5</span>
+            </div>
           </div>
           <div className="mb-4 p-2 bg-black/40 rounded-lg border border-white/5">
             <h4 className="text-[10px] uppercase opacity-50 mb-1">最近得分紀錄</h4>
@@ -646,7 +654,7 @@ export default function App() {
             style={{ 
               left: fs.x, 
               top: fs.y, 
-              transform: 'translate(-50%, -50%)' 
+              transform: 'translate(-50%, -50%)'
             }}
           >
             <motion.span 
@@ -677,29 +685,8 @@ export default function App() {
 
       <div className="absolute bottom-6 right-6 text-white/20 pointer-events-none flex items-center gap-3">
         <Flame className="w-6 h-6 animate-pulse text-orange-500" />
-        <span className="text-sm font-mono uppercase tracking-[0.3em]">Yakiniku Master Ultimate v3.1</span>
+        <span className="text-sm font-mono uppercase tracking-[0.3em]">Yakiniku Master Ultimate v3.5</span>
       </div>
-
-      {/* --- Custom Drag Layer (No System Icons) --- */}
-      {draggingMeat && (
-        <div className="fixed inset-0 pointer-events-none z-[100]">
-          <div 
-            className="absolute shadow-2xl rounded-full border-2"
-            style={{ 
-              left: draggingMeat.currentX - MEAT_WIDTH / 2, 
-              top: draggingMeat.currentY - MEAT_HEIGHT / 2,
-              width: MEAT_WIDTH,
-              height: MEAT_HEIGHT,
-              ...getMeatStyle(
-                draggingMeat.source === 'plate' ? 'raw' : 
-                (meatsOnGrill.find(m => m.id === draggingMeat.meatId)?.isSideAFacingDown ? 
-                 meatsOnGrill.find(m => m.id === draggingMeat.meatId)!.sideA.state : 
-                 meatsOnGrill.find(m => m.id === draggingMeat.meatId)!.sideB.state)
-              )
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,7 +1,13 @@
-# Release Notes - Yakiniku Master Ultimate v3.1
+# Release Notes - Yakiniku Master Ultimate v3.5
 
 ## 當前版本摘要
-本版本為「日式燒肉大師 ULTIMATE」的穩定版本，專注於核心烹飪體驗的優化、嚴格的物理碰撞偵測以及完善的遊戲狀態管理。
+本版本為「日式燒肉大師 ULTIMATE」的音效穩定性修復版本。我們更換了音效資源為更可靠的 Mixkit 來源，並修復了程式碼中的語法錯誤。
+
+## 新增功能 (New Features v3.5)
+
+### 1. 音效資源穩定性優化 (Sound Stability Optimization)
+*   **更換音效來源**：捨棄失效的 `soundjay.com` 連結，全面更換為 `assets.mixkit.co` 的穩定資源。
+*   **語法修復**：修正了浮動分數組件中的 `transform` 語法錯誤，確保 UI 渲染正常。
 
 ## 核心功能 (Existing Features)
 
