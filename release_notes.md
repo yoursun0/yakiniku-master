@@ -195,4 +195,9 @@
 *   快速切換暫停狀態。
 
 ---
-*由資深開發導師整理，確保技術架構與遊戲體驗並重。*
+*由Helic Leung透過Gemini 3 Flash Preview以vibe coding製作，製作時間大約十小時。*
+
+
+
+
+
