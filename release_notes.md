@@ -1,7 +1,59 @@
-# Release Notes - Yakiniku Master Ultimate v5.2
+# Release Notes - Yakiniku Master Ultimate v6.5
 
 ## 當前版本摘要
-本版本根據回饋優化了 UI 佈局，移除了多餘的裝飾性邊框，並調整了物件形狀以提升視覺自然度。
+本版本優化了行動裝置的平衡性，實作了動態縮放機制，並修正了翻譯缺失與動態評語邏輯。
+
+## 新增功能 (New Features v6.5)
+
+### 1. 行動裝置動態縮放 (Responsive Scaling for Fairness)
+*   **比例同步**：現在肉塊與盛肉盤會根據螢幕大小（行動版 vs 桌面版）自動縮放，縮放比例與烤網同步（約 0.71 倍），確保在小螢幕上也有相同的操作空間感與公平性。
+*   **碰撞偵測優化**：同步更新了放置肉塊時的碰撞偵測與烤網邊界判定，使其適配縮放後的尺寸。
+
+### 2. 難度動態評語 (Dynamic Scoring Comments)
+*   **分級門檻**：遊戲結束後的評語（燒肉之神、大廚、再接再厲）現在會根據難度動態調整門檻：
+    *   **簡單**：大廚 > 200, 燒肉之神 > 500
+    *   **普通**：大廚 > 150, 燒肉之神 > 300
+    *   **困難**：大廚 > 100, 燒肉之神 > 250
+
+## 修復與優化 (Fixes & Improvements v6.5)
+*   **翻譯修正**：補齊了排行榜無資料時的繁體中文翻譯（「目前尚無排名：...」）。
+*   **UI 穩定性**：優化了盛肉盤在不同解析度下的寬度表現。
+
+## 新增功能 (New Features v6.4)
+
+### 1. 分級排行榜 (Difficulty-Specific Leaderboards)
+*   **資料結構更新**：在 Firestore 的 `leaderboard` 集合中新增 `difficulty` 欄位。
+*   **獨立排名**：現在每種難度都有獨立的排行榜，避免不同難度之間的得分不公平競爭。
+*   **主畫面瀏覽**：在遊戲主畫面新增分頁功能，允許玩家在開始遊戲前切換並查看不同難度的全球排名。
+*   **結算畫面優化**：遊戲結束後，系統會自動顯示當前所玩難度的排行榜，並標註難度名稱。
+
+### 2. 資料驗證強化 (Security Rules & Schema)
+*   **規則更新**：更新 `firestore.rules` 以驗證 `difficulty` 欄位必須為 `easy`、`normal` 或 `hard`。
+*   **Schema 更新**：同步更新 `firebase-blueprint.json` 以反映最新的資料模型。
+
+## 修復與優化 (Fixes & Improvements v6.4)
+*   **提交邏輯優化**：修正了分數提交時的欄位對應，確保難度資訊正確寫入資料庫。
+*   **UI 調整**：優化了排行榜的顯示區域，確保在不同難度切換時有良好的視覺反饋。
+
+## 新增功能 (New Features v6.2)
+
+### 1. 音效系統修復 (Sound System Fix)
+*   **CDN 資源切換**：將原本指向本地 `/resources` 的音效路徑更新為 `assets.mixkit.co` 的公共 CDN 連結。
+*   **可靠性提升**：解決了因本地資源缺失導致的音效消失問題，確保 sizzle、correct、fail 與 end 音效正常播放。
+
+## 新增功能 (New Features v6.1)
+
+### 1. Firebase 專案遷移 (Project Migration)
+*   **專案切換**：成功將遊戲連接至 `minigame-b258e` 專案。
+*   **安全規則重部署**：在新專案上重新部署了 Firestore Security Rules，確保排行榜數據的安全性。
+*   **配置更新**：更新了 `firebase-applet-config.json` 以匹配新專案的憑證。
+
+## 新增功能 (New Features v6.0)
+
+### 1. 全球排行榜 (Global Leaderboard)
+*   **分數提交**：遊戲結束後，玩家可以輸入名字並將分數上傳至雲端。
+*   **即時排名**：自動顯示全球前 20 名的高分玩家。
+*   **Firebase 整合**：使用 Firestore 作為後端，確保數據的即時性與安全性。
 
 ## 新增功能 (New Features v5.2)
 

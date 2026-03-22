@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "LeaderboardEntry": {
+      "title": "Leaderboard Entry",
+      "description": "A single entry in the global leaderboard representing a player's score.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the player."
+        },
+        "score": {
+          "type": "integer",
+          "description": "The final score achieved by the player."
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["easy", "normal", "hard"],
+          "description": "The difficulty level of the game."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the score was achieved."
+        }
+      },
+      "required": ["name", "score", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/leaderboard/{entryId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Collection of all player scores for the global leaderboard."
+    }
+  }
+}

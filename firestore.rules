@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: leaderboard
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, 1-20 chars) - Player name
+    //   - score: number (required, positive) - Final score
+    //   - difficulty: string (required, ['easy', 'normal', 'hard']) - Difficulty level
+    //   - createdAt: timestamp (required) - Time achieved
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    // Check if the user is authenticated (not strictly required for public leaderboard, but good practice)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Validate required fields exist
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate string length
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate that a value is positive
+    function isPositive(field) {
+      return request.resource.data[field] is number && request.resource.data[field] >= 0;
+    }
+
+    // Domain Validator for Leaderboard Entry
+    function isValidLeaderboardEntry(data) {
+      return hasRequiredFields(['name', 'score', 'difficulty', 'createdAt']) &&
+             hasOnlyAllowedFields(['name', 'score', 'difficulty', 'createdAt']) &&
+             validStringLength('name', 1, 20) &&
+             isPositive('score') &&
+             data.difficulty in ['easy', 'normal', 'hard'] &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /leaderboard/{entryId} {
+      // Allow anyone to read the leaderboard (public scores)
+      allow read: if true;
+      
+      // Allow anyone to submit a score, but validate the data
+      allow create: if isValidLeaderboardEntry(request.resource.data);
+      
+      // Scores should be immutable once submitted
+      allow update, delete: if false;
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

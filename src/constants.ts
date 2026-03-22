@@ -52,7 +52,19 @@ export const TRANSLATIONS = {
     language: "Language",
     score: "Score",
     time: "Time",
-    rawLabel: "Raw"
+    rawLabel: "Raw",
+    leaderboard: "Leaderboard",
+    submit: "Submit",
+    namePlaceholder: "Enter Name",
+    rank: "Rank",
+    player: "Player",
+    loading: "Loading...",
+    submitting: "Submitting...",
+    success: "Score Saved!",
+    noScoresYet: "No scores yet for",
+    easyLeaderboard: "Easy Leaderboard",
+    normalLeaderboard: "Normal Leaderboard",
+    hardLeaderboard: "Hard Leaderboard"
   },
   zh: {
     title: "燒肉大師",
@@ -94,6 +106,18 @@ export const TRANSLATIONS = {
     language: "語言選擇",
     score: "得分",
     time: "時間",
-    rawLabel: "生肉"
+    rawLabel: "生肉",
+    leaderboard: "全球排行榜",
+    submit: "提交分數",
+    namePlaceholder: "輸入大名",
+    rank: "排名",
+    player: "玩家",
+    loading: "載入中...",
+    submitting: "提交中...",
+    success: "分數已儲存！",
+    noScoresYet: "目前尚無排名：",
+    easyLeaderboard: "簡單模式排行榜",
+    normalLeaderboard: "普通模式排行榜",
+    hardLeaderboard: "困難模式排行榜"
   }
 };

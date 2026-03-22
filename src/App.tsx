@@ -5,11 +5,32 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Timer, Trophy, Flame, RotateCw, Play, BarChart3, Clock } from 'lucide-react';
+import { Timer, Trophy, Flame, RotateCw, Play, BarChart3, Clock, Send, User } from 'lucide-react';
 import { MeatState, getNewState, getSideMultiplier, calculateHpChange, Difficulty, DIFFICULTY_SETTINGS, MEAT_WIDTH, MEAT_HEIGHT, GRILL_RADIUS, checkOverlap } from './gameLogic';
 import { ENABLE_DEBUG_PANEL, TRANSLATIONS } from './constants';
+import { db } from './firebase';
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot, 
+  serverTimestamp,
+  getDocFromServer,
+  doc,
+  where
+} from 'firebase/firestore';
 
 // --- Types & Constants ---
+
+interface LeaderboardEntry {
+  id: string;
+  name: string;
+  score: number;
+  difficulty: Difficulty;
+  timestamp: any;
+}
 
 interface SideState {
   elapsed: number;
@@ -44,13 +65,22 @@ export default function App() {
   const [meatsOnGrill, setMeatsOnGrill] = useState<MeatOnGrill[]>([]);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'ended'>('idle');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [leaderboardDifficulty, setLeaderboardDifficulty] = useState<Difficulty>('normal');
   const [language, setLanguage] = useState<Language>('zh');
   const [floatingScores, setFloatingScores] = useState<{ id: string; score: number; x: number; y: number; isSauce?: boolean; isTimeBonus?: boolean }[]>([]);
   const [draggedMeatId, setDraggedMeatId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [scale, setScale] = useState(1);
   const [touchDragInfo, setTouchDragInfo] = useState<{ type: 'plate' | 'grill'; meatId?: string; startX: number; startY: number; currentX: number; currentY: number } | null>(null);
   
+  // Leaderboard State
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
+
   const appRef = useRef<HTMLDivElement>(null);
   const grillRef = useRef<HTMLDivElement>(null);
   const sauceRef = useRef<HTMLDivElement>(null);
@@ -59,14 +89,16 @@ export default function App() {
 
   const t = TRANSLATIONS[language];
 
-  // --- Detection ---
+  // --- Detection & Scaling ---
   useEffect(() => {
-    const checkTouch = () => {
+    const updateScaleAndTouch = () => {
       setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+      const isMobile = window.innerWidth < 768;
+      setScale(isMobile ? 300 / 420 : 1);
     };
-    checkTouch();
-    window.addEventListener('resize', checkTouch);
-    return () => window.removeEventListener('resize', checkTouch);
+    updateScaleAndTouch();
+    window.addEventListener('resize', updateScaleAndTouch);
+    return () => window.removeEventListener('resize', updateScaleAndTouch);
   }, []);
 
   // --- Initialize Sounds ---
@@ -75,7 +107,44 @@ export default function App() {
       const audio = new Audio(url);
       audioRefs.current[key] = audio;
     });
+
+    // Test Firestore Connection
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Firebase connection test failed: client is offline. Check configuration.");
+        }
+      }
+    };
+    testConnection();
   }, []);
+
+  // Leaderboard Listener
+  useEffect(() => {
+    setLeaderboardLoading(true);
+    const q = query(
+      collection(db, 'leaderboard'),
+      where('difficulty', '==', leaderboardDifficulty),
+      orderBy('score', 'desc'),
+      limit(20)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const entries: LeaderboardEntry[] = [];
+      snapshot.forEach((doc) => {
+        entries.push({ id: doc.id, ...doc.data() } as LeaderboardEntry);
+      });
+      setLeaderboard(entries);
+      setLeaderboardLoading(false);
+    }, (error) => {
+      console.error("Firestore Error (Leaderboard):", error);
+      setLeaderboardLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [leaderboardDifficulty]);
 
   const playSound = (key: keyof typeof SOUNDS) => {
     const audio = audioRefs.current[key];
@@ -130,6 +199,7 @@ export default function App() {
 
   const endGame = () => {
     setGameState('ended');
+    setLeaderboardDifficulty(difficulty);
     playSound('end');
   };
 
@@ -205,17 +275,25 @@ export default function App() {
     if ((source !== 'plate' && source !== 'grill') || gameState !== 'playing' || !grillRef.current) return;
 
     const rect = grillRef.current.getBoundingClientRect();
-    const x = clientX - rect.left - MEAT_WIDTH / 2;
-    const y = clientY - rect.top - MEAT_HEIGHT / 2;
+    const scaledWidth = MEAT_WIDTH * scale;
+    const scaledHeight = MEAT_HEIGHT * scale;
+    const x = clientX - rect.left - scaledWidth / 2;
+    const y = clientY - rect.top - scaledHeight / 2;
 
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-    const dist = Math.sqrt(Math.pow(x + MEAT_WIDTH / 2 - centerX, 2) + Math.pow(y + MEAT_HEIGHT / 2 - centerY, 2));
+    const dist = Math.sqrt(Math.pow(x + scaledWidth / 2 - centerX, 2) + Math.pow(y + scaledHeight / 2 - centerY, 2));
 
-    if (dist > GRILL_RADIUS - 20) return;
+    if (dist > (GRILL_RADIUS * scale) - 20) return;
 
     if (source === 'plate') {
-      const isOverlapping = meatsOnGrill.some(meat => checkOverlap(meat.x, meat.y, x, y));
+      const isOverlapping = meatsOnGrill.some(meat => {
+        const dx = meat.x - x;
+        const dy = meat.y - y;
+        const normalizedDx = dx / (scaledWidth * 0.95);
+        const normalizedDy = dy / (scaledHeight * 0.95);
+        return (normalizedDx * normalizedDx + normalizedDy * normalizedDy) < 1;
+      });
 
       if (isOverlapping) return;
 
@@ -397,6 +475,27 @@ export default function App() {
     setMeatOnPlate(settings.meats);
     setMeatsOnGrill([]);
     setGameState('playing');
+    setHasSubmitted(false);
+    setPlayerName('');
+  };
+
+  const submitScore = async () => {
+    if (!playerName.trim() || isSubmitting || hasSubmitted || score === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'leaderboard'), {
+        name: playerName.trim(),
+        score: score,
+        difficulty: difficulty,
+        timestamp: serverTimestamp()
+      });
+      setHasSubmitted(true);
+    } catch (error) {
+      console.error("Error submitting score:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -492,8 +591,8 @@ export default function App() {
                     style={{
                       left: meat.x,
                       top: meat.y,
-                      width: MEAT_WIDTH,
-                      height: MEAT_HEIGHT,
+                      width: MEAT_WIDTH * scale,
+                      height: MEAT_HEIGHT * scale,
                       transformStyle: 'preserve-3d'
                     }}
                   >
@@ -538,30 +637,34 @@ export default function App() {
       {/* --- Bottom Interaction Area --- */}
       <div className="w-full max-w-5xl px-4 md:px-10 pb-4 md:pb-10 flex items-end justify-between gap-4">
         {/* Left: Plate with Raw Meat */}
-        <div className="relative group flex-1 max-w-[280px]">
+        <div className="relative group flex-1 w-[200px] md:w-[280px] max-w-[280px]">
           <div className="w-full aspect-[4/3] rounded-[40px] md:rounded-[100px] border-4 md:border-8 border-stone-800/30 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex items-center justify-center relative overflow-hidden transition-transform group-hover:scale-105 bg-cover bg-center bg-no-repeat"
                style={{ backgroundImage: "url('/resources/start-dish.png')" }}>
             {/* Meat Stack */}
             <div className="relative w-full h-full flex items-center justify-center z-10">
-              {Array.from({ length: meatOnPlate }).slice(0, 8).map((_, i) => (
-                <motion.div
-                  key={`plate-meat-${i}`}
-                  draggable={gameState === 'playing' && !isPaused && !isTouchDevice}
-                  onDragStart={onDragStartFromPlate}
-                  onTouchStart={onTouchStartFromPlate}
-                  whileHover={{ scale: 1.05 }}
-                  className="absolute rounded-full cursor-grab active:cursor-grabbing shadow-xl border-2 border-red-900/30 touch-none"
-                  style={{
-                    ...getMeatStyle('raw'),
-                    width: MEAT_WIDTH,
-                    height: MEAT_HEIGHT,
-                    left: `calc(50% - ${MEAT_WIDTH/2}px + ${(i % 3 - 1) * 15}px)`,
-                    top: `calc(50% - ${MEAT_HEIGHT/2}px + ${Math.floor(i / 3 - 1) * 10}px)`,
-                    zIndex: i,
-                    transform: `rotate(${(i % 2 === 0 ? 1 : -1) * (i * 5)}deg)`
-                  }}
-                />
-              ))}
+              {Array.from({ length: meatOnPlate }).slice(0, 8).map((_, i) => {
+                const scaledWidth = MEAT_WIDTH * scale;
+                const scaledHeight = MEAT_HEIGHT * scale;
+                return (
+                  <motion.div
+                    key={`plate-meat-${i}`}
+                    draggable={gameState === 'playing' && !isPaused && !isTouchDevice}
+                    onDragStart={onDragStartFromPlate}
+                    onTouchStart={onTouchStartFromPlate}
+                    whileHover={{ scale: 1.05 }}
+                    className="absolute rounded-full cursor-grab active:cursor-grabbing shadow-xl border-2 border-red-900/30 touch-none"
+                    style={{
+                      ...getMeatStyle('raw'),
+                      width: scaledWidth,
+                      height: scaledHeight,
+                      left: `calc(50% - ${scaledWidth/2}px + ${(i % 3 - 1) * (15 * scale)}px)`,
+                      top: `calc(50% - ${scaledHeight/2}px + ${Math.floor(i / 3 - 1) * (10 * scale)}px)`,
+                      zIndex: i,
+                      transform: `rotate(${(i % 2 === 0 ? 1 : -1) * (i * 5)}deg)`
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
           <div className="absolute -top-6 md:-top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 md:px-4 py-1 md:py-2 rounded-full text-white text-[10px] md:text-lg font-bold border border-white/10 whitespace-nowrap">
@@ -629,6 +732,63 @@ export default function App() {
               ))}
             </div>
 
+            {/* Leaderboard Section */}
+            <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden mb-8">
+              <div className="bg-white/5 px-4 py-3 border-b border-white/10 flex flex-col gap-3">
+                <div className="flex items-center gap-3 font-black text-white uppercase tracking-widest text-sm">
+                  <BarChart3 className="w-4 h-4 text-yellow-500" />
+                  {t.leaderboard}
+                </div>
+                <div className="flex gap-1">
+                  {(['easy', 'normal', 'hard'] as Difficulty[]).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setLeaderboardDifficulty(d)}
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                        leaderboardDifficulty === d 
+                          ? 'bg-yellow-500 text-black' 
+                          : 'bg-white/5 text-white/40 hover:bg-white/10'
+                      }`}
+                    >
+                      {t[d]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="max-h-[200px] overflow-y-auto">
+                {leaderboardLoading ? (
+                  <div className="p-8 text-center text-white/40 italic text-xs">{t.loading}</div>
+                ) : leaderboard.length === 0 ? (
+                  <div className="p-8 text-center text-white/40 italic text-xs">No scores yet for {t[leaderboardDifficulty]}!</div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-white/5 text-[8px] uppercase tracking-widest text-white/40">
+                      <tr>
+                        <th className="px-4 py-2 font-medium">{t.rank}</th>
+                        <th className="px-4 py-2 font-medium">{t.player}</th>
+                        <th className="px-4 py-2 font-medium text-right">{t.score}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[10px]">
+                      {leaderboard.map((entry, index) => (
+                        <tr key={entry.id} className="border-t border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-2 font-mono text-white/60">
+                            {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : `#${index + 1}`}
+                          </td>
+                          <td className="px-4 py-2 font-bold text-white truncate max-w-[80px]">
+                            {entry.name}
+                          </td>
+                          <td className="px-4 py-2 text-right font-black text-yellow-500">
+                            {entry.score.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-col gap-2 mb-6 md:mb-8">
               <div className="text-stone-400 text-[10px] md:text-xs uppercase tracking-widest font-bold">{t.language}</div>
               <div className="flex justify-center gap-2">
@@ -667,11 +827,11 @@ export default function App() {
       )}
 
       {gameState === 'ended' && (
-        <div className="absolute inset-0 bg-black/95 z-50 flex items-center justify-center flex-col p-4 md:p-8 text-center">
+        <div className="absolute inset-0 bg-black/95 z-50 flex items-center justify-center flex-col p-4 md:p-8 text-center overflow-y-auto">
           <motion.div 
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="bg-stone-900 p-8 md:p-16 rounded-3xl border-2 border-white/10 shadow-2xl max-w-md w-full"
+            className="bg-stone-900 p-6 md:p-12 rounded-3xl border-2 border-white/10 shadow-2xl max-w-xl w-full my-auto"
           >
             <h2 className="text-3xl md:text-5xl font-black text-white mb-2">{t.gameOver}</h2>
             <p className="text-stone-500 font-mono text-xs md:text-sm mb-4 md:mb-6 uppercase tracking-widest">{t[difficulty]}</p>
@@ -680,9 +840,109 @@ export default function App() {
               {score}
             </div>
 
-            <p className="text-stone-400 mb-8 md:mb-12 text-lg md:text-xl leading-relaxed">
-              {score > 100 ? t.god : score > 50 ? t.chef : t.practice}
+            <p className="text-stone-400 mb-6 md:mb-8 text-lg md:text-xl leading-relaxed">
+              {(() => {
+                if (difficulty === 'easy') {
+                  if (score > 500) return t.god;
+                  if (score > 200) return t.chef;
+                  return t.practice;
+                } else if (difficulty === 'normal') {
+                  if (score > 300) return t.god;
+                  if (score > 150) return t.chef;
+                  return t.practice;
+                } else { // hard
+                  if (score > 250) return t.god;
+                  if (score > 100) return t.chef;
+                  return t.practice;
+                }
+              })()}
             </p>
+
+            {/* Leaderboard Submission */}
+            {score > 0 && !hasSubmitted && (
+              <div className="mb-8 p-4 md:p-6 bg-emerald-500/10 rounded-2xl border border-emerald-500/30">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3 text-emerald-400 font-bold">
+                    <User className="w-5 h-5" />
+                    <span>{t.submit}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
+                      placeholder={t.namePlaceholder}
+                      className="flex-1 bg-black/40 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                    <button
+                      onClick={submitScore}
+                      disabled={isSubmitting || !playerName.trim()}
+                      className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black px-4 md:px-6 py-3 rounded-xl transition-all flex items-center gap-2"
+                    >
+                      {isSubmitting ? (
+                        <RotateCw className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Send className="w-5 h-5" />
+                      )}
+                      <span className="hidden md:inline">{t.submit}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {hasSubmitted && (
+              <div className="mb-8 p-4 bg-emerald-500/20 rounded-xl border border-emerald-500/50 text-emerald-400 font-bold text-center animate-bounce">
+                {t.success}
+              </div>
+            )}
+
+            {/* Global Leaderboard */}
+            <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden mb-8">
+              <div className="bg-white/5 px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-3 font-black text-white uppercase tracking-widest">
+                  <BarChart3 className="w-5 h-5 text-yellow-500" />
+                  {difficulty === 'easy' ? t.easyLeaderboard : difficulty === 'normal' ? t.normalLeaderboard : t.hardLeaderboard}
+                </div>
+              </div>
+              <div className="max-h-[200px] md:max-h-[300px] overflow-y-auto">
+                {leaderboardLoading ? (
+                  <div className="p-8 text-center text-white/40 italic">{t.loading}</div>
+                ) : leaderboard.length === 0 ? (
+                  <div className="p-8 text-center text-white/40 italic">{t.noScoresYet} {t[leaderboardDifficulty]}!</div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-white/5 text-[10px] uppercase tracking-widest text-white/40">
+                      <tr>
+                        <th className="px-6 py-3 font-medium">{t.rank}</th>
+                        <th className="px-6 py-3 font-medium">{t.player}</th>
+                        <th className="px-6 py-3 font-medium text-right">{t.score}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {leaderboard.map((entry, index) => (
+                        <tr 
+                          key={entry.id} 
+                          className={`border-t border-white/5 transition-colors hover:bg-white/5 ${
+                            entry.name === playerName && hasSubmitted ? 'bg-emerald-500/10' : ''
+                          }`}
+                        >
+                          <td className="px-6 py-4 font-mono text-white/60">
+                            {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : `#${index + 1}`}
+                          </td>
+                          <td className="px-6 py-4 font-bold text-white truncate max-w-[120px]">
+                            {entry.name}
+                          </td>
+                          <td className="px-6 py-4 text-right font-black text-yellow-500">
+                            {entry.score.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
             
             <button 
               onClick={() => setGameState('idle')}
@@ -706,7 +966,7 @@ export default function App() {
               >
                 {isPaused ? t.resume : t.pause}
               </button>
-              <span className="text-[10px] opacity-50">v5.2</span>
+              <span className="text-[10px] opacity-50">v6.5</span>
             </div>
           </div>
           <div className="mb-4 p-2 bg-black/40 rounded-lg border border-white/5">
@@ -791,7 +1051,7 @@ export default function App() {
  
       <div className="absolute bottom-4 right-4 md:bottom-6 md:right-6 text-white/20 pointer-events-none flex items-center gap-2 md:gap-3">
         <Flame className="w-4 h-4 md:w-6 md:h-6 animate-pulse text-orange-500" />
-        <span className="text-[10px] md:text-sm font-mono uppercase tracking-[0.3em]">{t.title} {t.ultimate} v5.2</span>
+        <span className="text-[10px] md:text-sm font-mono uppercase tracking-[0.3em]">{t.title} {t.ultimate} v6.5</span>
       </div>
     </div>
   );

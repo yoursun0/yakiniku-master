@@ -1,6 +1,51 @@
 # Issue Log - Yakiniku Master Ultimate
 
-### 1. UI Refinement & Layout Cleanup
+## [v6.5] 2026-03-22 - 行動版平衡性與動態評語 (Mobile Balance & Dynamic Comments)
+- **問題描述**: 
+    1. 行動版烤網縮小但肉塊維持原大，導致操作空間變窄，不公平。
+    2. 排行榜無資料時顯示英文。
+    3. 遊戲結束評語門檻固定，未隨難度調整。
+- **解決方案**: 
+    1. 實作 `scale` 狀態，根據視窗寬度動態調整 `MEAT_WIDTH`、`MEAT_HEIGHT` 與 `GRILL_RADIUS`。
+    2. 補齊 `noScoresYet` 翻譯字串。
+    3. 實作難度感知的評語邏輯，根據 `difficulty` 設定不同的分數門檻。
+- **狀態**: 已解決 (Fixed)
+
+## [v6.4] 2026-03-22 - 分級排行榜實作 (Difficulty-Specific Leaderboard Implementation)
+- **問題描述**: 原本的排行榜是全球統一排名，但不同難度的得分潛力不同，導致排名不公平。
+- **解決方案**: 
+    1. 修改 Firestore Schema，為每筆紀錄增加 `difficulty` 欄位。
+    2. 更新 `App.tsx` 的查詢邏輯，根據 `leaderboardDifficulty` 狀態進行過濾。
+    3. 在主畫面增加難度切換按鈕，供玩家瀏覽不同難度的排名。
+    4. 在結算畫面根據當前難度顯示對應的排行榜。
+- **狀態**: 已解決 (Fixed)
+
+### 1. Global Leaderboard Integration
+- **Issue:** Players wanted a way to compare their scores with others globally.
+- **Fix:** 
+    - Integrated Firebase Firestore for data storage.
+    - Added a submission form in the Game Over screen.
+    - Implemented a real-time leaderboard showing the top 20 scores.
+    - Added security rules to validate score submissions.
+    - Updated UI versioning to v6.0.
+- **Status:** Fixed & Verified (v6.0).
+
+### 2. Firebase Import Errors
+- **Issue:** `Failed to resolve import "firebase/firestore"` and `Failed to resolve import "./firebase-applet-config.json"`.
+- **Fix:** 
+    - Installed the `firebase` package.
+    - Corrected the import path in `src/firebase.ts` to `../firebase-applet-config.json`.
+- **Status:** Fixed & Verified (v6.0).
+
+### 3. Firebase Project Migration
+- **Issue:** User wanted to move the backend from "My First Project" to an existing "MiniGame" project.
+- **Fix:** 
+    - Re-provisioned Firebase with Project ID `minigame-b258e`.
+    - Re-deployed Firestore Security Rules to the new project.
+    - Verified real-time connection to the new database.
+- **Status:** Fixed & Verified (v6.1).
+
+### 4. UI Refinement & Layout Cleanup
 - **Issue:** The golden border around the grill was taking up too much space, and the square sauce dish was requested for better aesthetics.
 - **Fix:** 
     - Removed the "Golden Grill Frame" div and expanded the `grill.png` container to fill the space.
@@ -87,6 +132,21 @@
     - Renamed "體力 (HP)" to "健康值 (Health)" across all translations and UI.
     - Updated floating score feedback thresholds (40/20/10/0).
 - **Status:** Fixed & Verified (v4.3).
+
+### 5. 音效資源遺失 (Sound Assets Missing)
+- **Issue:** 玩家反應音效消失，經檢查發現 `/public/resources` 目錄下缺少 `.mp3` 檔案。
+- **Fix:** 
+    - 將 `App.tsx` 中的 `SOUNDS` 常數更新為指向 `assets.mixkit.co` 的公共 CDN 連結。
+    - 驗證了 `playSound` 邏輯在不同觸發點（放置、翻面、得分、結束）的正確性。
+    - 更新版本號至 v6.2。
+- **Status:** Fixed & Verified (v6.2).
+
+### 6. 音效資源還原至本地 (Revert to Local Sound Assets)
+- **Issue:** 使用者已手動補齊本地 `/public/resources` 下的 `.mp3` 檔案，要求停止使用 CDN。
+- **Fix:** 
+    - 將 `App.tsx` 中的 `SOUNDS` 常數還原為本地路徑。
+    - 更新版本號至 v6.3。
+- **Status:** Fixed & Verified (v6.3).
 
 ## [2026-03-22]
 
