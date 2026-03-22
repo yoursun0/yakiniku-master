@@ -1,7 +1,13 @@
-# Release Notes - Yakiniku Master Ultimate v6.5
+# Release Notes - Yakiniku Master Ultimate v6.6
 
 ## 當前版本摘要
-本版本優化了行動裝置的平衡性，實作了動態縮放機制，並修正了翻譯缺失與動態評語邏輯。
+本版本簡化了主畫面的 UI，讓排行榜自動跟隨遊戲難度切換，提供更直覺的使用者體驗。
+
+## 新增功能 (New Features v6.6)
+
+### 1. 排行榜 UI 簡化 (Leaderboard UI Simplification)
+*   **難度連動**：移除了排行榜專屬的難度切換按鈕。現在排行榜會自動讀取玩家在畫面上方選擇的「遊戲難度」，並即時顯示對應難度的全球排名。
+*   **介面清爽**：減少了畫面上重複的控制元件，使主畫面更加簡潔、專注。
 
 ## 新增功能 (New Features v6.5)
 

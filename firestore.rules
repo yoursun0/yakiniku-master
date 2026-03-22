@@ -49,12 +49,12 @@ service cloud.firestore {
 
     // Domain Validator for Leaderboard Entry
     function isValidLeaderboardEntry(data) {
-      return hasRequiredFields(['name', 'score', 'difficulty', 'createdAt']) &&
-             hasOnlyAllowedFields(['name', 'score', 'difficulty', 'createdAt']) &&
+      return hasRequiredFields(['name', 'score', 'difficulty', 'timestamp']) &&
+             hasOnlyAllowedFields(['name', 'score', 'difficulty', 'timestamp']) &&
              validStringLength('name', 1, 20) &&
              isPositive('score') &&
              data.difficulty in ['easy', 'normal', 'hard'] &&
-             data.createdAt is timestamp;
+             data.timestamp is timestamp;
     }
 
     // ===============================================================
@@ -75,6 +75,10 @@ service cloud.firestore {
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;
+    }
+    
+    match /test/connection {
+      allow read: if true;
     }
   }
 }

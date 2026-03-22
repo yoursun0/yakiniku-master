@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Timer, Trophy, Flame, RotateCw, Play, BarChart3, Clock, Send, User } from 'lucide-react';
 import { MeatState, getNewState, getSideMultiplier, calculateHpChange, Difficulty, DIFFICULTY_SETTINGS, MEAT_WIDTH, MEAT_HEIGHT, GRILL_RADIUS, checkOverlap } from './gameLogic';
 import { ENABLE_DEBUG_PANEL, TRANSLATIONS } from './constants';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { 
   collection, 
   addDoc, 
@@ -65,7 +65,6 @@ export default function App() {
   const [meatsOnGrill, setMeatsOnGrill] = useState<MeatOnGrill[]>([]);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'ended'>('idle');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
-  const [leaderboardDifficulty, setLeaderboardDifficulty] = useState<Difficulty>('normal');
   const [language, setLanguage] = useState<Language>('zh');
   const [floatingScores, setFloatingScores] = useState<{ id: string; score: number; x: number; y: number; isSauce?: boolean; isTimeBonus?: boolean }[]>([]);
   const [draggedMeatId, setDraggedMeatId] = useState<string | null>(null);
@@ -80,6 +79,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
+  const [isFirebaseAvailable, setIsFirebaseAvailable] = useState<boolean>(true);
 
   const appRef = useRef<HTMLDivElement>(null);
   const grillRef = useRef<HTMLDivElement>(null);
@@ -101,6 +101,28 @@ export default function App() {
     return () => window.removeEventListener('resize', updateScaleAndTouch);
   }, []);
 
+  // --- Firebase Error Handling ---
+  const handleFirestoreError = (error: unknown, operationType: string, path: string | null) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        emailVerified: auth.currentUser?.emailVerified,
+        isAnonymous: auth.currentUser?.isAnonymous,
+        providerInfo: auth.currentUser?.providerData.map(provider => ({
+          providerId: provider.providerId,
+          displayName: provider.displayName,
+          email: provider.email,
+          photoUrl: provider.photoURL
+        })) || []
+      },
+      operationType,
+      path
+    };
+    console.error('Firestore Error Detailed: ', JSON.stringify(errInfo, null, 2));
+  };
+
   // --- Initialize Sounds ---
   useEffect(() => {
     Object.entries(SOUNDS).forEach(([key, url]) => {
@@ -112,7 +134,10 @@ export default function App() {
     const testConnection = async () => {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log("Firebase connection test successful!");
       } catch (error) {
+        handleFirestoreError(error, 'get', 'test/connection');
+        setIsFirebaseAvailable(false);
         if (error instanceof Error && error.message.includes('the client is offline')) {
           console.error("Firebase connection test failed: client is offline. Check configuration.");
         }
@@ -123,10 +148,15 @@ export default function App() {
 
   // Leaderboard Listener
   useEffect(() => {
+    if (!isFirebaseAvailable) {
+      setLeaderboardLoading(false);
+      return;
+    }
     setLeaderboardLoading(true);
+    const path = 'leaderboard';
     const q = query(
-      collection(db, 'leaderboard'),
-      where('difficulty', '==', leaderboardDifficulty),
+      collection(db, path),
+      where('difficulty', '==', difficulty),
       orderBy('score', 'desc'),
       limit(20)
     );
@@ -139,12 +169,13 @@ export default function App() {
       setLeaderboard(entries);
       setLeaderboardLoading(false);
     }, (error) => {
-      console.error("Firestore Error (Leaderboard):", error);
+      handleFirestoreError(error, 'list', path);
+      setIsFirebaseAvailable(false);
       setLeaderboardLoading(false);
     });
 
     return () => unsubscribe();
-  }, [leaderboardDifficulty]);
+  }, [difficulty, isFirebaseAvailable]);
 
   const playSound = (key: keyof typeof SOUNDS) => {
     const audio = audioRefs.current[key];
@@ -480,7 +511,7 @@ export default function App() {
   };
 
   const submitScore = async () => {
-    if (!playerName.trim() || isSubmitting || hasSubmitted || score === 0) return;
+    if (!isFirebaseAvailable || !playerName.trim() || isSubmitting || hasSubmitted || score === 0) return;
 
     setIsSubmitting(true);
     try {
@@ -493,6 +524,7 @@ export default function App() {
       setHasSubmitted(true);
     } catch (error) {
       console.error("Error submitting score:", error);
+      setIsFirebaseAvailable(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -733,61 +765,48 @@ export default function App() {
             </div>
 
             {/* Leaderboard Section */}
-            <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden mb-8">
-              <div className="bg-white/5 px-4 py-3 border-b border-white/10 flex flex-col gap-3">
-                <div className="flex items-center gap-3 font-black text-white uppercase tracking-widest text-sm">
-                  <BarChart3 className="w-4 h-4 text-yellow-500" />
-                  {t.leaderboard}
+            {isFirebaseAvailable && (
+              <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden mb-8">
+                <div className="bg-white/5 px-4 py-3 border-b border-white/10 flex flex-col gap-3">
+                  <div className="flex items-center gap-3 font-black text-white uppercase tracking-widest text-sm">
+                    <BarChart3 className="w-4 h-4 text-yellow-500" />
+                    {difficulty === 'easy' ? t.easyLeaderboard : difficulty === 'normal' ? t.normalLeaderboard : t.hardLeaderboard}
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {(['easy', 'normal', 'hard'] as Difficulty[]).map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setLeaderboardDifficulty(d)}
-                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${
-                        leaderboardDifficulty === d 
-                          ? 'bg-yellow-500 text-black' 
-                          : 'bg-white/5 text-white/40 hover:bg-white/10'
-                      }`}
-                    >
-                      {t[d]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="max-h-[200px] overflow-y-auto">
-                {leaderboardLoading ? (
-                  <div className="p-8 text-center text-white/40 italic text-xs">{t.loading}</div>
-                ) : leaderboard.length === 0 ? (
-                  <div className="p-8 text-center text-white/40 italic text-xs">No scores yet for {t[leaderboardDifficulty]}!</div>
-                ) : (
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-white/5 text-[8px] uppercase tracking-widest text-white/40">
-                      <tr>
-                        <th className="px-4 py-2 font-medium">{t.rank}</th>
-                        <th className="px-4 py-2 font-medium">{t.player}</th>
-                        <th className="px-4 py-2 font-medium text-right">{t.score}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-[10px]">
-                      {leaderboard.map((entry, index) => (
-                        <tr key={entry.id} className="border-t border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="px-4 py-2 font-mono text-white/60">
-                            {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : `#${index + 1}`}
-                          </td>
-                          <td className="px-4 py-2 font-bold text-white truncate max-w-[80px]">
-                            {entry.name}
-                          </td>
-                          <td className="px-4 py-2 text-right font-black text-yellow-500">
-                            {entry.score.toLocaleString()}
-                          </td>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {leaderboardLoading ? (
+                    <div className="p-8 text-center text-white/40 italic text-xs">{t.loading}</div>
+                  ) : leaderboard.length === 0 ? (
+                    <div className="p-8 text-center text-white/40 italic text-xs">No scores yet for {t[difficulty]}!</div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-white/5 text-[8px] uppercase tracking-widest text-white/40">
+                        <tr>
+                          <th className="px-4 py-2 font-medium">{t.rank}</th>
+                          <th className="px-4 py-2 font-medium">{t.player}</th>
+                          <th className="px-4 py-2 font-medium text-right">{t.score}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                      </thead>
+                      <tbody className="text-[10px]">
+                        {leaderboard.map((entry, index) => (
+                          <tr key={entry.id} className="border-t border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-2 font-mono text-white/60">
+                              {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : `#${index + 1}`}
+                            </td>
+                            <td className="px-4 py-2 font-bold text-white truncate max-w-[80px]">
+                              {entry.name}
+                            </td>
+                            <td className="px-4 py-2 text-right font-black text-yellow-500">
+                              {entry.score.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex flex-col gap-2 mb-6 md:mb-8">
               <div className="text-stone-400 text-[10px] md:text-xs uppercase tracking-widest font-bold">{t.language}</div>
@@ -859,7 +878,7 @@ export default function App() {
             </p>
 
             {/* Leaderboard Submission */}
-            {score > 0 && !hasSubmitted && (
+            {isFirebaseAvailable && score > 0 && !hasSubmitted && (
               <div className="mb-8 p-4 md:p-6 bg-emerald-500/10 rounded-2xl border border-emerald-500/30">
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-3 text-emerald-400 font-bold">
@@ -891,58 +910,60 @@ export default function App() {
               </div>
             )}
 
-            {hasSubmitted && (
+            {isFirebaseAvailable && hasSubmitted && (
               <div className="mb-8 p-4 bg-emerald-500/20 rounded-xl border border-emerald-500/50 text-emerald-400 font-bold text-center animate-bounce">
                 {t.success}
               </div>
             )}
 
             {/* Global Leaderboard */}
-            <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden mb-8">
-              <div className="bg-white/5 px-6 py-4 border-b border-white/10 flex items-center justify-between">
-                <div className="flex items-center gap-3 font-black text-white uppercase tracking-widest">
-                  <BarChart3 className="w-5 h-5 text-yellow-500" />
-                  {difficulty === 'easy' ? t.easyLeaderboard : difficulty === 'normal' ? t.normalLeaderboard : t.hardLeaderboard}
+            {isFirebaseAvailable && (
+              <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden mb-8">
+                <div className="bg-white/5 px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                  <div className="flex items-center gap-3 font-black text-white uppercase tracking-widest">
+                    <BarChart3 className="w-5 h-5 text-yellow-500" />
+                    {difficulty === 'easy' ? t.easyLeaderboard : difficulty === 'normal' ? t.normalLeaderboard : t.hardLeaderboard}
+                  </div>
+                </div>
+                <div className="max-h-[200px] md:max-h-[300px] overflow-y-auto">
+                  {leaderboardLoading ? (
+                    <div className="p-8 text-center text-white/40 italic">{t.loading}</div>
+                  ) : leaderboard.length === 0 ? (
+                    <div className="p-8 text-center text-white/40 italic">{t.noScoresYet} {t[difficulty]}!</div>
+                  ) : (
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-white/5 text-[10px] uppercase tracking-widest text-white/40">
+                        <tr>
+                          <th className="px-6 py-3 font-medium">{t.rank}</th>
+                          <th className="px-6 py-3 font-medium">{t.player}</th>
+                          <th className="px-6 py-3 font-medium text-right">{t.score}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm">
+                        {leaderboard.map((entry, index) => (
+                          <tr 
+                            key={entry.id} 
+                            className={`border-t border-white/5 transition-colors hover:bg-white/5 ${
+                              entry.name === playerName && hasSubmitted ? 'bg-emerald-500/10' : ''
+                            }`}
+                          >
+                            <td className="px-6 py-4 font-mono text-white/60">
+                              {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : `#${index + 1}`}
+                            </td>
+                            <td className="px-6 py-4 font-bold text-white truncate max-w-[120px]">
+                              {entry.name}
+                            </td>
+                            <td className="px-6 py-4 text-right font-black text-yellow-500">
+                              {entry.score.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
-              <div className="max-h-[200px] md:max-h-[300px] overflow-y-auto">
-                {leaderboardLoading ? (
-                  <div className="p-8 text-center text-white/40 italic">{t.loading}</div>
-                ) : leaderboard.length === 0 ? (
-                  <div className="p-8 text-center text-white/40 italic">{t.noScoresYet} {t[leaderboardDifficulty]}!</div>
-                ) : (
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-white/5 text-[10px] uppercase tracking-widest text-white/40">
-                      <tr>
-                        <th className="px-6 py-3 font-medium">{t.rank}</th>
-                        <th className="px-6 py-3 font-medium">{t.player}</th>
-                        <th className="px-6 py-3 font-medium text-right">{t.score}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm">
-                      {leaderboard.map((entry, index) => (
-                        <tr 
-                          key={entry.id} 
-                          className={`border-t border-white/5 transition-colors hover:bg-white/5 ${
-                            entry.name === playerName && hasSubmitted ? 'bg-emerald-500/10' : ''
-                          }`}
-                        >
-                          <td className="px-6 py-4 font-mono text-white/60">
-                            {index + 1 === 1 ? '🥇' : index + 1 === 2 ? '🥈' : index + 1 === 3 ? '🥉' : `#${index + 1}`}
-                          </td>
-                          <td className="px-6 py-4 font-bold text-white truncate max-w-[120px]">
-                            {entry.name}
-                          </td>
-                          <td className="px-6 py-4 text-right font-black text-yellow-500">
-                            {entry.score.toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+            )}
             
             <button 
               onClick={() => setGameState('idle')}
